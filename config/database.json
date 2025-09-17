@@ -1,0 +1,15 @@
+{
+  "host": "localhost",
+  "port": 5435,
+  "database": "semiconductor_db",
+  "username": "app_user",
+  "password": "app_pass",
+  "connection_timeout": 10,
+  "max_connections": 20,
+  "batch_size": 500,
+  "storage_interval": 300,
+  "min_connections": 5,
+  "pool_recycle": 3600,
+  "ssl_mode": "prefer",
+  "echo": false
+}

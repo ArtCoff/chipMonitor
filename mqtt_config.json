@@ -1,0 +1,18 @@
+{
+  "host": "localhost",
+  "port": 11883,
+  "username": "",
+  "password": "",
+  "client_id": "chipmonitor_155927",
+  "keepalive": 60,
+  "timeout": 30,
+  "reconnect_delay": 5,
+  "max_reconnect_attempts": 5,
+  "subscribe_topics": [
+    "factory/telemetry/+/+/msgpack",
+    "gateway/+/status"
+  ],
+  "qos": 1,
+  "message_buffer_size": 1000,
+  "batch_size": 50
+}

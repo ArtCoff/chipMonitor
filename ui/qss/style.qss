@@ -1,0 +1,519 @@
+/* ================== 暗黑主题样式表 ================== */
+
+/* 全局基础样式 */
+QMainWindow, QWidget {
+    font-size: 13px;
+    font-family: "Segoe UI", "Microsoft YaHei", "SF Pro Display", sans-serif;
+    background-color: #111827;
+    color: #f9fafb;
+}
+
+/* ================== 菜单栏样式 ================== */
+menuBar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border-bottom: 2px solid #374151;
+    padding: 8px;
+    border-radius: 0;
+}
+
+menuBar QPushButton {
+    background: rgba(75, 85, 99, 0.3);
+    color: #f9fafb;
+    border: 1px solid rgba(75, 85, 99, 0.5);
+    border-radius: 8px;
+    padding: 8px 16px;
+    margin: 0 4px;
+    font-weight: 500;
+    min-width: 80px;
+    min-height: 80px;
+}
+
+menuBar QPushButton:hover {
+    background: rgba(75, 85, 99, 0.5);
+    border-color: rgba(75, 85, 99, 0.7);
+}
+
+menuBar QPushButton:pressed {
+    background: rgba(75, 85, 99, 0.4);
+}
+
+/* ================== 主窗口布局样式 ================== */
+QSplitter#mainSplitter {
+    border: none;
+    background: #111827;
+}
+
+QSplitter#mainSplitter::handle {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #374151, stop:0.5 #4b5563, stop:1 #374151);
+    width: 12px;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QSplitter#mainSplitter::handle:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #4b5563, stop:0.5 #6b7280, stop:1 #4b5563);
+}
+
+/* ================== 控制面板样式 ================== */
+QFrame#controlContainer {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 2px solid #374151;
+    border-radius: 16px;
+    margin: 4px;
+}
+
+QLabel#controlPanelTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f9fafb;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #4b5563);
+    border: 1px solid #6b7280;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 8px;
+}
+
+/* ================== 标签页样式 ================== */
+QTabWidget#controlTabs {
+    background: transparent;
+    border: none;
+}
+
+QTabWidget#controlTabs::pane {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 2px solid #374151;
+    border-radius: 12px;
+    margin-top: 8px;
+}
+
+QTabWidget#controlTabs::tab-bar {
+    left: 8px;
+}
+
+QTabWidget#controlTabs QTabBar::tab {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    color: #9ca3af;
+    border: 2px solid #374151;
+    padding: 12px 20px;
+    margin-right: 4px;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+QTabWidget#controlTabs QTabBar::tab:selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #4b5563);
+    color: #f9fafb;
+    border-color: #6b7280;
+    border-bottom-color: #1f2937;
+    font-weight: 600;
+}
+
+QTabWidget#controlTabs QTabBar::tab:hover:!selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+    color: #d1d5db;
+}
+
+/* ================== 可视化区域样式 ================== */
+QFrame#visualizationContainer {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 2px solid #374151;
+    border-radius: 16px;
+    margin: 4px;
+}
+
+QLabel#visualizationTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f9fafb;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #4b5563);
+    border: 1px solid #6b7280;
+    border-radius: 12px;
+    padding: 12px;
+    margin: 8px;
+}
+
+/* ================== 按钮样式 ================== */
+QPushButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+    color: #f9fafb;
+    border: 1px solid #4b5563;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 16px;
+}
+
+QPushButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #4b5563, stop:1 #374151);
+    border-color: #6b7280;
+}
+
+QPushButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+}
+
+QPushButton:disabled {
+    background: #374151;
+    color: #6b7280;
+}
+
+/* 特殊按钮样式 */
+QPushButton#connectBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #065f46, stop:1 #064e3b);
+    color: #d1fae5;
+    border: 1px solid #047857;
+}
+
+QPushButton#connectBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #047857, stop:1 #065f46);
+}
+
+QPushButton#disconnectBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #991b1b, stop:1 #7f1d1d);
+    color: #fecaca;
+    border: 1px solid #dc2626;
+}
+
+QPushButton#disconnectBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #b91c1c, stop:1 #991b1b);
+}
+
+QPushButton#refreshBtn, QPushButton#resetBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #4b5563, stop:1 #374151);
+    color: #e5e7eb;
+}
+
+QPushButton#refreshBtn:hover, QPushButton#resetBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #6b7280, stop:1 #4b5563);
+}
+
+/* ================== 组框样式 ================== */
+QGroupBox {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f9fafb;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 2px solid #374151;
+    border-radius: 12px;
+    margin-top: 16px;
+    padding-top: 12px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 8px 16px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #374151, stop:0.5 #4b5563, stop:1 #374151);
+    border: 1px solid #6b7280;
+    border-radius: 8px;
+    color: #f9fafb;
+    font-weight: 600;
+}
+
+/* ================== 输入框样式 ================== */
+QLineEdit, QSpinBox, QComboBox {
+    background: #1f2937;
+    border: 2px solid #374151;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: #f9fafb;
+    selection-background-color: #4b5563;
+    selection-color: #f9fafb;
+}
+
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus {
+    border-color: #6b7280;
+    background: #111827;
+}
+
+QComboBox::drop-down {
+    border: none;
+    background: transparent;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #9ca3af;
+    margin-right: 8px;
+}
+
+/* ================== 进度条样式 ================== */
+QProgressBar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+    border: 2px solid #4b5563;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: #f9fafb;
+    height: 24px;
+}
+
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                               stop:0 #4b5563, stop:0.5 #6b7280, stop:1 #4b5563);
+    border-radius: 6px;
+    margin: 2px;
+}
+
+/* ================== 状态栏样式 ================== */
+QStatusBar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border-top: 2px solid #374151;
+    color: #f9fafb;
+    padding: 4px;
+}
+
+QLabel#statusLabel {
+    color: #f9fafb;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 8px;
+}
+
+/* ================== 列表和表格样式 ================== */
+QListWidget, QListWidget#deviceList {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 2px solid #374151;
+    border-radius: 8px;
+    alternate-background-color: #374151;
+    selection-background-color: #4b5563;
+    selection-color: #f9fafb;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget::item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #374151;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QListWidget::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #4b5563, stop:1 #6b7280);
+    color: #f9fafb;
+    font-weight: 500;
+}
+
+QListWidget::item:hover:!selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+}
+
+/* ================== 数据可视化组件样式 ================== */
+
+/* 设备信息条样式 */
+QFrame#deviceInfoBar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 1px solid #374151;
+    border-radius: 6px;
+    margin: 2px;
+}
+
+QLabel#currentDeviceLabel {
+    color: #f9fafb;
+    font-weight: bold;
+}
+
+QLabel#deviceTypeLabel, QLabel#separator {
+    color: #9ca3af;
+    font-size: 11px;
+}
+
+QLabel#separator {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+/* 右侧控制面板样式 */
+QFrame#rightControlPanel {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 1px solid #374151;
+    border-radius: 8px;
+}
+
+/* 表格页面样式 */
+QLabel#tablePageTitle {
+    color: #f9fafb;
+    font-size: 13px;
+    font-weight: bold;
+    margin: 2px;
+}
+
+QPushButton#refreshTableBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+    color: #f9fafb;
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-weight: 500;
+}
+
+QPushButton#refreshTableBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #4b5563, stop:1 #374151);
+    border-color: #6b7280;
+}
+
+/* 设备概览表格样式 */
+QTableWidget#deviceOverviewTable {
+    background: #111827;
+    alternate-background-color: #1f2937;
+    gridline-color: #374151;
+    color: #f9fafb;
+    border: 1px solid #374151;
+    border-radius: 4px;
+    selection-background-color: #4b5563;
+    selection-color: #f9fafb;
+}
+
+QTableWidget#deviceOverviewTable::item {
+    padding: 6px;
+    border: none;
+    font-size: 11px;
+}
+
+QTableWidget#deviceOverviewTable::item:selected {
+    background-color: #4b5563;
+}
+
+QTableWidget#deviceOverviewTable QHeaderView::section {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+    color: #f9fafb;
+    padding: 6px;
+    border: 1px solid #4b5563;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+/* 仪表盘占位页面样式 */
+QFrame#dashboardPlaceholder {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+    border: 1px dashed #4b5563;
+    border-radius: 8px;
+}
+
+QLabel#dashboardIcon {
+    font-size: 48px;
+}
+
+QLabel#dashboardTitle {
+    color: #f9fafb;
+    font-size: 18px;
+    font-weight: bold;
+    margin: 10px;
+}
+
+QLabel#dashboardDesc {
+    color: #9ca3af;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* 底部状态栏样式 */
+QLabel#totalDevicesLabel, QLabel#onlineDevicesLabel, QLabel#offlineDevicesLabel {
+    font-size: 10px;
+    padding: 2px 8px;
+}
+
+QLabel#onlineDevicesLabel {
+    color: #10b981;
+    font-weight: bold;
+}
+
+QLabel#offlineDevicesLabel {
+    color: #ef4444;
+    font-weight: bold;
+}
+
+QLabel#totalDevicesLabel {
+    color: #9ca3af;
+}
+
+/* 数据可视化组件专用按钮样式 */
+QPushButton#refreshDataBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #065f46, stop:1 #064e3b);
+    color: #d1fae5;
+    border: 1px solid #047857;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-weight: 500;
+    min-height: 12px;
+}
+
+QPushButton#refreshDataBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #047857, stop:1 #065f46);
+}
+
+QPushButton#clearDataBtn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #991b1b, stop:1 #7f1d1d);
+    color: #fecaca;
+    border: 1px solid #dc2626;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-weight: 500;
+    min-height: 12px;
+}
+
+QPushButton#clearDataBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #b91c1c, stop:1 #991b1b);
+}
+
+/* 状态指示器样式 */
+QLabel#connectionStatusOnline {
+    color: #10b981;
+    font-weight: bold;
+}
+
+QLabel#connectionStatusOffline {
+    color: #ef4444;
+    font-weight: bold;
+}
+
+QLabel#connectionStatusIdle {
+    color: #6b7280;
+    font-weight: bold;
+}
