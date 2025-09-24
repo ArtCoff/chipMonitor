@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 
 
 class RedisManager:
-    """Redis连接和操作管理器 - 同步版本（线程池优化）"""
+    """Redis连接和操作管理器"""
 
     def __init__(self, redis_url: str = None):
         # 使用配置文件中的URL

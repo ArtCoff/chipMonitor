@@ -54,7 +54,6 @@ def setup_logging():
 def main():
     setup_logging()
     app = QApplication(sys.argv)
-    # 设置应用样式（适合工业环境）
     app.setStyle("Basic")
     import os
 

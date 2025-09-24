@@ -6,8 +6,9 @@ import msgpack
 from typing import Dict, List, Optional, Callable, Set, Any
 from PySide6.QtCore import QObject, Signal, QTimer, Qt
 from .thread_pool import thread_pool, TaskType, TaskPriority
-from .data_bus import DataChannel
-from .enhanced_data_bus import enhanced_data_bus
+from .data_bus import data_bus, DataChannel, DataMessage
+
+# from .enhanced_data_bus import enhanced_data_bus
 
 
 class MqttManager(QObject):
@@ -667,7 +668,7 @@ class MqttManager(QObject):
             if parse_success:
 
                 channel = DataChannel.TELEMETRY_DATA
-                success = enhanced_data_bus.publish(
+                success = data_bus.publish(
                     channel=channel,
                     source="mqtt_client",
                     data=result,
@@ -686,7 +687,7 @@ class MqttManager(QObject):
                     "error": result.get("parse_error", "未知错误"),
                     "task_id": task_id,
                 }
-                enhanced_data_bus.publish(
+                data_bus.publish(
                     channel=DataChannel.ERRORS,
                     source="mqtt_client",
                     data=error_data,
@@ -696,7 +697,7 @@ class MqttManager(QObject):
         except Exception as e:
             logging.error(f"处理任务回调失败: {task_id} -> {e}")
             try:
-                enhanced_data_bus.publish(
+                data_bus.publish(
                     channel=DataChannel.ERRORS,
                     source="mqtt_client",
                     data={
@@ -772,7 +773,7 @@ class MqttManager(QObject):
             }
 
             # 发布到DataBus
-            enhanced_data_bus.publish(
+            data_bus.publish(
                 channel=DataChannel.DEVICE_EVENTS,
                 source="mqtt_client",
                 data=gateway_result,
@@ -798,7 +799,7 @@ class MqttManager(QObject):
             logging.info(f"系统消息: {topic} | {len(payload)}字节")
 
             # 发布系统事件
-            enhanced_data_bus.publish(
+            data_bus.publish(
                 channel=DataChannel.DEVICE_EVENTS,
                 source="mqtt_client",
                 data={
@@ -872,7 +873,7 @@ class MqttManager(QObject):
         logging.error(f"[失败] 设备数据处理失败 {task_id}: {error}")
         self.connection_status.emit(f"数据处理失败: {error[:50]}...")
         try:
-            enhanced_data_bus.publish(
+            data_bus.publish(
                 channel=DataChannel.ERRORS,
                 source="mqtt_client",
                 data={
@@ -887,6 +888,10 @@ class MqttManager(QObject):
     def get_discovered_devices(self) -> Dict[str, dict]:
         """获取已发现的设备信息"""
         return {device_id: {"device_id": device_id} for device_id in self.known_devices}
+
+    def is_connected(self) -> bool:
+        """检查MQTT连接状态"""
+        return self.connected
 
 
 # 全局MQTT管理器

@@ -449,3 +449,47 @@ class DeviceOverviewTable(QWidget):
 
         except Exception as e:
             self.logger.error(f"设备双击处理失败: {e}")
+
+    def update_devices_data(self, devices_data: list):
+        """兼容方法 - 将列表格式转换为字典格式"""
+        try:
+            if isinstance(devices_data, list):
+                # 将列表格式转换为字典格式
+                device_dict = {}
+                for device in devices_data:
+                    device_id = device.get("device_id")
+                    if device_id:
+                        device_dict[device_id] = device
+                self.update_table_data(device_dict)
+            else:
+                # 如果已经是字典格式，直接调用
+                self.update_table_data(devices_data)
+
+        except Exception as e:
+            self.logger.error(f"设备数据更新失败: {e}")
+
+    def set_selected_device(self, device_id: str):
+        """设置选中的设备"""
+        try:
+            for row in range(self.device_overview_table.rowCount()):
+                item = self.device_overview_table.item(row, 0)
+                if item and item.text() == device_id:
+                    self.device_overview_table.selectRow(row)
+                    break
+        except Exception as e:
+            self.logger.error(f"设置选中设备失败: {e}")
+
+    def update_device_row(self, device_id: str, device_info: dict):
+        """更新单个设备行"""
+        try:
+            # 找到设备对应的行
+            for row in range(self.device_overview_table.rowCount()):
+                item = self.device_overview_table.item(row, 0)
+                if item and item.text() == device_id:
+                    # 判断在线状态
+                    is_online = self.is_device_online(device_info)
+                    # 更新该行数据
+                    self.populate_table_row(row, device_id, device_info, is_online)
+                    break
+        except Exception as e:
+            self.logger.error(f"更新设备行失败: {e}")

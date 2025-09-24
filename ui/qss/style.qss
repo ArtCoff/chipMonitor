@@ -16,26 +16,106 @@ menuBar {
     padding: 8px;
     border-radius: 0;
 }
-
-menuBar QPushButton {
-    background: rgba(75, 85, 99, 0.3);
+/* ========== 左侧功能按钮（已满意，保留） ========== */
+#FunctionButtonGroup QToolButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
     color: #f9fafb;
-    border: 1px solid rgba(75, 85, 99, 0.5);
+    border: 1px solid #4b5563;
     border-radius: 8px;
-    padding: 8px 16px;
-    margin: 0 4px;
+    padding: 8px 4px;  /* 图标在上，文字在下，横向padding可小 */
+    font-size: 12px;
     font-weight: 500;
-    min-width: 80px;
-    min-height: 80px;
+}
+#FunctionButtonGroup QToolButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #4b5563, stop:1 #374151);
+    border-color: #6b7280;
+}
+#FunctionButtonGroup QToolButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
 }
 
-menuBar QPushButton:hover {
-    background: rgba(75, 85, 99, 0.5);
-    border-color: rgba(75, 85, 99, 0.7);
+/* ========== 右侧状态控制区 ========== */
+#StatusControlWidget {
+    background: #252f3f;  /* 比左侧稍深，突出“状态区” */
+    border: 1px solid #374151;
+    border-radius: 8px;
+    padding: 4px 8px;
 }
 
-menuBar QPushButton:pressed {
-    background: rgba(75, 85, 99, 0.4);
+/* 状态组内标签（MQTT/持久化/数据库） */
+#StatusControlWidget QLabel {
+    color: #e5e7eb;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 0 4px;
+}
+
+/* 状态指示灯样式（保持你代码中的颜色，仅微调） */
+#StatusControlWidget QLabel[status="connected"] {
+    color: #10b981; font-weight: bold;
+}
+#StatusControlWidget QLabel[status="disconnected"] {
+    color: #ef4444; font-weight: bold;
+}
+#StatusControlWidget QLabel[status="running"] {
+    color: #3b82f6; font-weight: bold;
+}
+#StatusControlWidget QLabel[status="stopped"] {
+    color: #6b7280; font-weight: bold;
+}
+#StatusControlWidget QLabel[status="db_connected"] {
+    color: #8b5cf6; font-weight: bold;
+}
+#StatusControlWidget QLabel[status="db_warning"] {
+    color: #f59e0b; font-weight: bold;
+}
+
+/* ========== 开关按钮样式 ========== */
+#StatusControlWidget QPushButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #374151, stop:1 #1f2937);
+    color: #f9fafb;
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    min-height: 22px;
+    min-width: 40px;
+}
+
+#StatusControlWidget QPushButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #4b5563, stop:1 #374151);
+    border-color: #6b7280;
+}
+
+#StatusControlWidget QPushButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                               stop:0 #1f2937, stop:1 #111827);
+}
+
+#StatusControlWidget QPushButton:disabled {
+    background: #374151;
+    color: #6b7280;
+    border-color: #4b5563;
+}
+
+/* 刷新按钮特殊样式（圆形/紧凑） */
+#StatusControlWidget QPushButton[refresh="true"] {
+    background: #374151;
+    border: 1px solid #4b5563;
+    border-radius: 11px; /* 圆形按钮 */
+    padding: 0;
+    min-width: 22px;
+    min-height: 22px;
+    font-size: 14px;
+}
+#StatusControlWidget QPushButton[refresh="true"]:hover {
+    background: #4b5563;
 }
 
 /* ================== 主窗口布局样式 ================== */
@@ -146,16 +226,16 @@ QLabel#visualizationTitle {
 }
 
 /* ================== 按钮样式 ================== */
-QPushButton {
+/* QPushButton {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                stop:0 #374151, stop:1 #1f2937);
     color: #f9fafb;
     border: 1px solid #4b5563;
-    border-radius: 8px;
-    padding: 10px 20px;
-    font-size: 13px;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 15px;
     font-weight: 500;
-    min-height: 16px;
+    min-height: 20px;
 }
 
 QPushButton:hover {
@@ -172,7 +252,7 @@ QPushButton:pressed {
 QPushButton:disabled {
     background: #374151;
     color: #6b7280;
-}
+} */
 
 /* 特殊按钮样式 */
 QPushButton#connectBtn {

@@ -7,8 +7,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QStatusBar,
     QFrame,
-    QPushButton,
-    QButtonGroup,
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QIcon
@@ -21,7 +19,9 @@ from .components.NetworkControlPanel import NetworkControlPanel
 from .components.DatabaseControlPanel import DatabaseControlPanel
 from core.mqtt_client import mqtt_manager
 from core.thread_pool import thread_pool, TaskType, TaskPriority
-from core.enhanced_data_bus import enhanced_data_bus
+from core.data_bus import data_bus, DataChannel
+from core.database_manager import db_manager
+from services.database_persistence import database_persistence_service
 
 
 class MainWindow(QMainWindow):
@@ -43,11 +43,16 @@ class MainWindow(QMainWindow):
         self.visualization_widget = None
         self.stack_control_widget = None
 
+        self.persistence_status_timer = QTimer()
+        self.persistence_status_timer.timeout.connect(self.update_persistence_status)
+        self.persistence_status_timer.start(10000)  # 10秒检查一次持久化服务状态
+
         # 当前可视化模式
         self.current_mode = "table"
-        self.redis_status_timer = QTimer()
-        self.redis_status_timer.timeout.connect(self.update_redis_status)
-        self.redis_status_timer.start(10000)  # 10秒检查一次Redis状态
+        # 🔥 添加启动服务定时器
+        self.startup_timer = QTimer()
+        self.startup_timer.setSingleShot(True)
+        self.startup_timer.timeout.connect(self.auto_start_services)
 
         # 初始化UI和样式
         self.setup_ui()
@@ -174,6 +179,14 @@ class MainWindow(QMainWindow):
             self.menu_bar.database_signal.connect(self.open_database_window)
         if hasattr(self.menu_bar, "exit_signal"):
             self.menu_bar.exit_signal.connect(self.close)
+        if hasattr(self.menu_bar, "mqtt_toggle_requested"):
+            self.menu_bar.mqtt_toggle_requested.connect(self.on_mqtt_toggle_requested)
+        if hasattr(self.menu_bar, "persistence_toggle_requested"):
+            self.menu_bar.persistence_toggle_requested.connect(
+                self.on_persistence_toggle_requested
+            )
+        if hasattr(self.menu_bar, "status_refresh_requested"):
+            self.menu_bar.status_refresh_requested.connect(self.refresh_all_status)
 
         # StackControl信号连接
         if self.stack_control_widget:
@@ -199,11 +212,21 @@ class MainWindow(QMainWindow):
             self.on_mqtt_statistics_updated, Qt.QueuedConnection
         )
         # DataBus系统信号
-        enhanced_data_bus.message_published.connect(
+        data_bus.message_published.connect(
             self.on_databus_message_published, Qt.QueuedConnection
         )
-        enhanced_data_bus.message_delivered.connect(
+        data_bus.message_delivered.connect(
             self.on_databus_message_delivered, Qt.QueuedConnection
+        )
+        # 🔥 添加数据库持久化服务信号连接
+        database_persistence_service.service_started.connect(
+            self.on_persistence_service_started, Qt.QueuedConnection
+        )
+        database_persistence_service.service_stopped.connect(
+            self.on_persistence_service_stopped, Qt.QueuedConnection
+        )
+        database_persistence_service.stats_updated.connect(
+            self.on_persistence_stats_updated, Qt.QueuedConnection
         )
 
     # ================== 模式切换事件处理 ==================
@@ -211,13 +234,52 @@ class MainWindow(QMainWindow):
     def on_mqtt_statistics_updated(self, stats: dict):
         """更新MQTT统计信息到UI"""
         try:
-            self.status_label.setText(
-                f"MQTT: 收{stats['messages_received']}条, 连接{int(stats['connection_duration'])}秒"
-            )
+            # 🔥 简化统计显示 - 移除Redis相关
+            messages_received = stats.get("messages_received", 0)
+            connection_duration = int(stats.get("connection_duration", 0))
+
+            # 获取DataBus统计
+            databus_stats = data_bus.get_stats()
+            published = databus_stats.get("published", 0)
+            delivered = databus_stats.get("delivered", 0)
+
+            # 简化状态显示
+            status_text = f"MQTT: 收{messages_received}条 | DataBus: 发布{published}条/投递{delivered}次"
+            self.status_label.setText(status_text)
+
+            # 更新设备计数
             if "known_devices_count" in stats:
                 self.update_device_count(stats["known_devices_count"])
+
         except Exception as e:
             self.logger.error(f"更新统计失败: {e}")
+
+    # 🔥 新增：数据库持久化服务信号处理
+    @Slot()
+    def on_persistence_service_started(self):
+        """持久化服务启动"""
+        self.status_label.setText("数据库持久化服务已启动")
+        self.logger.info("数据库持久化服务已启动")
+
+    @Slot()
+    def on_persistence_service_stopped(self):
+        """持久化服务停止"""
+        self.status_label.setText("数据库持久化服务已停止")
+        self.logger.warning("数据库持久化服务已停止")
+
+    @Slot(dict)
+    def on_persistence_stats_updated(self, stats: dict):
+        """持久化服务统计更新"""
+        try:
+            messages_batched = stats.get("messages_batched", 0)
+            messages_persisted = stats.get("messages_persisted", 0)
+
+            if messages_batched > 0 or messages_persisted > 0:
+                self.status_label.setText(
+                    f"数据持久化: 队列{messages_batched}条/已存储{messages_persisted}条"
+                )
+        except Exception as e:
+            self.logger.error(f"处理持久化统计失败: {e}")
 
     @Slot(str)
     def on_mode_changed(self, mode):
@@ -371,10 +433,6 @@ class MainWindow(QMainWindow):
         try:
             self.logger.info("关闭主窗口...")
 
-            # 🔥 停止可视化控制器
-            if self.visualization_controller:
-                self.visualization_controller.stop()
-
             # 关闭子窗口
             if hasattr(self, "history_window") and self.history_window:
                 self.history_window.close()
@@ -399,6 +457,8 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         self.logger.info("主窗口已显示")
         self.status_label.setText("系统就绪 - 界面加载完成")
+        if not self.startup_timer.isActive():
+            self.startup_timer.start(2000)  # 2秒后启动服务
 
     @Slot(bool, str)
     def on_mqtt_connection_changed(self, connected: bool, message: str):
@@ -453,33 +513,6 @@ class MainWindow(QMainWindow):
         # 可用于性能监控
         if count > 0 and channel != "telemetry_data":
             self.logger.debug(f"DataBus投递: {channel} -> {count}个订阅者")
-
-    @Slot(dict)
-    def on_mqtt_statistics_updated(self, stats: dict):
-        """更新MQTT统计信息到UI - 集成Redis统计"""
-        try:
-            # 获取增强数据总线统计
-            enhanced_stats = enhanced_data_bus.get_buffer_stats()
-            redis_stats = enhanced_stats.get("redis_buffer", {})
-
-            # MQTT统计
-            messages_received = stats.get("messages_received", 0)
-            connection_duration = int(stats.get("connection_duration", 0))
-
-            # Redis缓冲统计
-            buffered_messages = redis_stats.get("buffered_messages", 0)
-            redis_connected = redis_stats.get("redis_connected", False)
-
-            # 综合状态显示
-            redis_status = "✓" if redis_connected else "✗"
-            status_text = f"MQTT: 收{messages_received}条 | Redis{redis_status}: 缓存{buffered_messages}条"
-
-            # 更新设备计数
-            if "known_devices_count" in stats:
-                self.update_device_count(stats["known_devices_count"])
-
-        except Exception as e:
-            self.logger.error(f"更新增强统计失败: {e}")
 
     @Slot(list)
     def on_device_list_updated(self, device_list: list):
@@ -564,23 +597,270 @@ class MainWindow(QMainWindow):
             self.logger.error(f"处理可视化连接状态变化失败: {e}")
 
     @Slot()
-    def update_redis_status(self):
-        """定期检查Redis状态"""
+    def update_persistence_status(self):
+        """定期检查持久化服务状态"""
         try:
-            stats = enhanced_data_bus.get_buffer_stats()
-            redis_stats = stats.get("redis_buffer", {})
-            buffer_counts = stats.get("buffer_counts", {})
+            service_stats = database_persistence_service.get_service_stats()
 
-            if redis_stats.get("redis_connected"):
-                # Redis正常
-                total_buffered = sum(buffer_counts.values())
-                if total_buffered > 0:
-                    self.status_label.setText(
-                        f"系统正常 | Redis缓冲: {total_buffered}条消息"
-                    )
+            if service_stats.get("running"):
+                # 服务正常运行
+                total_queued = sum(service_stats.get("queue_sizes", {}).values())
+                db_connected = service_stats.get("database_connected", False)
+
+                if db_connected:
+                    if total_queued > 0:
+                        self.status_label.setText(
+                            f"系统正常 | 数据库队列: {total_queued}条"
+                        )
+                    else:
+                        self.status_label.setText("系统正常 | 数据库同步")
+                else:
+                    self.status_label.setText("系统运行 | 数据库离线")
             else:
-                # Redis断连
-                self.status_label.setText("系统运行 | Redis缓冲离线")
+                self.status_label.setText("系统运行 | 持久化服务离线")
 
         except Exception as e:
-            self.logger.error(f"Redis状态检查失败: {e}")
+            self.logger.error(f"持久化服务状态检查失败: {e}")
+
+    @Slot()
+    def auto_start_services(self):
+        """自动启动服务"""
+        try:
+            self.logger.info("开始自动启动服务...")
+            self.status_label.setText("正在启动系统服务...")
+
+            # 🔥 1. 启动数据库连接
+            db_success = self.auto_start_database()
+
+            # 🔥 2. 启动数据库持久化服务（依赖数据库连接）
+            persistence_success = False
+            if db_success:
+                persistence_success = self.auto_start_persistence_service()
+
+            # 🔥 3. 启动MQTT服务（独立于数据库）
+            mqtt_success = self.auto_start_mqtt_service()
+
+            # 🔥 4. 更新UI状态
+            self.update_startup_status(db_success, persistence_success, mqtt_success)
+
+            # 🔥 5. 刷新MenuBar状态显示
+            QTimer.singleShot(1000, self.refresh_all_status)
+
+        except Exception as e:
+            self.logger.error(f"自动启动服务失败: {e}")
+            self.status_label.setText(f"服务启动失败: {e}")
+
+    def auto_start_database(self) -> bool:
+        """自动启动数据库连接"""
+        try:
+            self.status_label.setText("正在连接数据库...")
+
+            if db_manager.is_connected():
+                self.logger.info("数据库已连接，跳过启动")
+                return True
+
+            # 尝试连接数据库
+            success = db_manager.connect()
+
+            if success:
+                self.logger.info("✅ 数据库自动连接成功")
+                self.status_label.setText("数据库连接成功")
+                return True
+            else:
+                self.logger.warning("❌ 数据库自动连接失败")
+                self.status_label.setText("数据库连接失败")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"数据库自动连接异常: {e}")
+            self.status_label.setText(f"数据库连接异常: {e}")
+            return False
+
+    def auto_start_persistence_service(self) -> bool:
+        """自动启动数据库持久化服务"""
+        try:
+            self.status_label.setText("正在启动持久化服务...")
+
+            # 检查服务状态
+            stats = database_persistence_service.get_service_stats()
+            if stats.get("running"):
+                self.logger.info("持久化服务已运行，跳过启动")
+                return True
+
+            # 启动持久化服务
+            success = database_persistence_service.start()
+
+            if success:
+                self.logger.info("✅ 持久化服务自动启动成功")
+                self.status_label.setText("持久化服务启动成功")
+                return True
+            else:
+                self.logger.warning("❌ 持久化服务自动启动失败")
+                self.status_label.setText("持久化服务启动失败")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"持久化服务自动启动异常: {e}")
+            self.status_label.setText(f"持久化服务启动异常: {e}")
+            return False
+
+    def auto_start_mqtt_service(self) -> bool:
+        """自动启动MQTT服务"""
+        try:
+            self.status_label.setText("正在启动MQTT服务...")
+
+            if mqtt_manager.is_connected():
+                self.logger.info("MQTT已连接，跳过启动")
+                return True
+
+            # 🔥 从配置加载MQTT设置（可选）
+            mqtt_config = self.load_mqtt_config()
+
+            # 启动MQTT连接
+            if mqtt_config:
+                success = mqtt_manager.connect(**mqtt_config)
+            else:
+                success = mqtt_manager.connect()  # 使用默认配置
+
+            if success:
+                self.logger.info("✅ MQTT服务自动启动成功")
+
+                # 🔥 自动订阅默认主题
+                self.auto_subscribe_topics()
+                return True
+            else:
+                self.logger.warning("❌ MQTT服务自动启动失败")
+                self.status_label.setText("MQTT服务启动失败")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"MQTT服务自动启动异常: {e}")
+            self.status_label.setText(f"MQTT服务启动异常: {e}")
+            return False
+
+    def load_mqtt_config(self) -> dict:
+        """加载MQTT配置"""
+        try:
+            # 🔥 这里可以从配置文件加载，现在使用默认值
+            return {"host": "localhost", "port": 1883, "username": "", "password": ""}
+        except Exception as e:
+            self.logger.debug(f"加载MQTT配置失败: {e}")
+            return {}
+
+    def auto_subscribe_topics(self):
+        """自动订阅默认主题"""
+        try:
+            # 🔥 默认订阅的主题列表
+            default_topics = [
+                "factory/telemetry/+/+",  # 所有设备遥测数据
+                "factory/telemetry/+/+/json",  # JSON格式遥测数据
+                "factory/telemetry/+/+/msgpack",  # MessagePack格式
+                "gateway/+/status",  # 网关状态
+                "system/alerts",  # 系统告警
+            ]
+
+            for topic in default_topics:
+                success = mqtt_manager.subscribe_topic(topic, qos=1)
+                if success:
+                    self.logger.info(f"自动订阅成功: {topic}")
+                else:
+                    self.logger.warning(f"自动订阅失败: {topic}")
+
+        except Exception as e:
+            self.logger.error(f"自动订阅主题失败: {e}")
+
+    def update_startup_status(
+        self, db_success: bool, persistence_success: bool, mqtt_success: bool
+    ):
+        """更新启动状态显示"""
+        try:
+            # 🔥 统计成功的服务数
+            success_count = sum([db_success, persistence_success, mqtt_success])
+            total_services = 3
+
+            if success_count == total_services:
+                self.status_label.setText("✅ 所有服务启动成功")
+                self.logger.info("所有服务启动完成")
+            elif success_count > 0:
+                self.status_label.setText(
+                    f"⚠️ 部分服务启动成功 ({success_count}/{total_services})"
+                )
+                self.logger.warning(
+                    f"部分服务启动失败: DB={db_success}, 持久化={persistence_success}, MQTT={mqtt_success}"
+                )
+            else:
+                self.status_label.setText("❌ 所有服务启动失败")
+                self.logger.error("所有服务启动失败")
+
+        except Exception as e:
+            self.logger.error(f"更新启动状态失败: {e}")
+
+    # 🔥 新增：手动服务控制方法
+    @Slot(bool)
+    def on_mqtt_toggle_requested(self, start: bool):
+        """处理MQTT开关请求"""
+        try:
+            if start:
+                if self.auto_start_mqtt_service():
+                    self.status_label.setText("MQTT服务已启动")
+                else:
+                    self.status_label.setText("MQTT服务启动失败")
+            else:
+                mqtt_manager.disconnect()
+                self.status_label.setText("MQTT服务已停止")
+                self.logger.info("MQTT服务已手动停止")
+        except Exception as e:
+            self.logger.error(f"MQTT开关操作失败: {e}")
+
+    @Slot(bool)
+    def on_persistence_toggle_requested(self, start: bool):
+        """处理持久化服务开关请求"""
+        try:
+            if start:
+                if self.auto_start_persistence_service():
+                    self.status_label.setText("持久化服务已启动")
+                else:
+                    self.status_label.setText("持久化服务启动失败")
+            else:
+                if database_persistence_service.stop():
+                    self.status_label.setText("持久化服务已停止")
+                    self.logger.info("持久化服务已手动停止")
+                else:
+                    self.status_label.setText("持久化服务停止失败")
+        except Exception as e:
+            self.logger.error(f"持久化服务开关操作失败: {e}")
+
+    @Slot()
+    def refresh_all_status(self):
+        """刷新所有状态显示"""
+        try:
+            # 获取各服务状态
+            mqtt_connected = mqtt_manager.is_connected()
+
+            persistence_stats = database_persistence_service.get_service_stats()
+            persistence_running = persistence_stats.get("running", False)
+
+            db_connected = db_manager.is_connected()
+
+            # 🔥 更新MenuBar状态显示（如果存在）
+            if hasattr(self.menu_bar, "update_all_status"):
+                self.menu_bar.update_all_status(
+                    mqtt_connected, persistence_running, db_connected
+                )
+
+            # 更新主窗口状态显示
+            if mqtt_connected and persistence_running and db_connected:
+                self.status_label.setText("✅ 所有服务正常运行")
+            else:
+                status_parts = []
+                if not db_connected:
+                    status_parts.append("数据库离线")
+                if not persistence_running:
+                    status_parts.append("持久化停止")
+                if not mqtt_connected:
+                    status_parts.append("MQTT断开")
+
+                self.status_label.setText(f"⚠️ {', '.join(status_parts)}")
+
+        except Exception as e:
+            self.logger.error(f"刷新状态失败: {e}")
