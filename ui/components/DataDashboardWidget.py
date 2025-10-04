@@ -36,14 +36,13 @@ class DashboardWidget(QWidget):
             "timestamp": "时间戳",
             "temperature": "温度(°C)",
             "pressure": "压力(Torr)",
-            "flow_rate": "流量(sccm)",
-            "power": "功率(W)",
-            "voltage": "电压(V)",
-            "current": "电流(A)",
+            "rf_power": "RF功率(W)",
+            "endpoint": "终点信号",
             "recipe": "工艺",
             "step": "步骤",
             "lot_id": "批次号",
             "wafer_id": "晶圆号",
+            "channel": "通道",
         }
 
         self.setup_ui()

@@ -21,6 +21,7 @@ from PySide6.QtGui import QFont, QIcon
 
 from config.mqtt_config import get_current_config, save_config, MqttConfig
 from core.mqtt_client import mqtt_manager
+from core.device_manager import device_manager
 from utils.path import ICON_DIR
 
 
@@ -235,9 +236,9 @@ class NetworkControlPanel(QDialog):
             mqtt_manager.statistics_updated.connect(
                 self.on_statistics_updated, Qt.QueuedConnection
             )
-            mqtt_manager.device_discovered.connect(
-                self.on_device_discovered, Qt.QueuedConnection
-            )
+            # mqtt_manager.device_discovered.connect(
+            #     self.on_device_discovered, Qt.QueuedConnection
+            # )
 
             # DataBus监听
             try:

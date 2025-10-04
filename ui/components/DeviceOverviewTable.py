@@ -67,7 +67,7 @@ class DeviceOverviewTable(QWidget):
         layout.addStretch()
 
         # 刷新按钮
-        refresh_btn = QPushButton("⟳ 刷新")
+        refresh_btn = QPushButton("刷新")
         refresh_btn.setObjectName("deviceTableRefreshBtn")
         refresh_btn.setMaximumWidth(80)
         refresh_btn.clicked.connect(self.on_refresh_clicked)
@@ -84,22 +84,16 @@ class DeviceOverviewTable(QWidget):
         self.device_overview_table.setSelectionMode(QTableWidget.SingleSelection)
         self.device_overview_table.verticalHeader().setVisible(False)
 
-        # 🔥 设置表格列 - 优化的列设计
+        # 设置表格列 - 优化的列设计
         columns = [
             ("设备ID", 100),
             ("类型", 80),
+            ("厂商", 70),
             ("状态", 70),
-            ("工艺", 90),
-            ("步骤", 50),
-            ("批次", 70),
-            ("晶圆", 70),
-            ("温度", 70),
-            ("压力", 70),
-            ("功率", 60),
-            ("端点", 60),
-            ("更新", 70),
-            ("数据", 50),
-            ("时长", 70),
+            ("传感器数量", 80),
+            ("数据频率", 100),
+            ("最后在线时间", 110),
+            ("运行时长", 80),
         ]
 
         self.device_overview_table.setColumnCount(len(columns))
@@ -263,14 +257,7 @@ class DeviceOverviewTable(QWidget):
             self.logger.error(f"表格刷新失败: {e}")
 
     def is_device_online(self, device_info: dict) -> bool:
-        """判断设备是否在线"""
-        try:
-            last_update = device_info.get("last_update")
-            if not last_update:
-                return False
-            return (time.time() - last_update) < 30  # 30秒内认为在线
-        except:
-            return False
+        return bool(device_info.get("online", False))
 
     def populate_table_row(
         self, row: int, device_id: str, device_info: dict, is_online: bool
@@ -287,95 +274,28 @@ class DeviceOverviewTable(QWidget):
             type_item = QTableWidgetItem(device_type)
             self.device_overview_table.setItem(row, 1, type_item)
 
+            vendor = device_info.get("vendor", "UNKNOWN")
+            vendor_item = QTableWidgetItem(vendor)
+            self.device_overview_table.setItem(row, 2, vendor_item)
+
             # 连接状态
             status_text = "● 在线" if is_online else "● 离线"
             status_item = QTableWidgetItem(status_text)
             status_color = QColor("#10b981") if is_online else QColor("#ef4444")
             status_item.setForeground(status_color)
             status_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
-            self.device_overview_table.setItem(row, 2, status_item)
-
-            # 当前工艺
-            recipe_item = QTableWidgetItem(device_info.get("recipe", "--"))
-            self.device_overview_table.setItem(row, 3, recipe_item)
-
-            # 工艺步骤
-            step_item = QTableWidgetItem(device_info.get("step", "--"))
-            self.device_overview_table.setItem(row, 4, step_item)
-
-            # 批次号
-            lot_item = QTableWidgetItem(device_info.get("lot_id", "--"))
-            self.device_overview_table.setItem(row, 5, lot_item)
-
-            # 晶圆号
-            wafer_item = QTableWidgetItem(device_info.get("wafer_id", "--"))
-            self.device_overview_table.setItem(row, 6, wafer_item)
+            self.device_overview_table.setItem(row, 3, status_item)
 
             # 🔥 传感器数据 - 显示最新值
             self.populate_sensor_data(row, device_info)
 
-            # 最后更新时间
-            update_time = self.format_update_time(device_info.get("last_update"))
-            update_item = QTableWidgetItem(update_time)
-            self.device_overview_table.setItem(row, 11, update_item)
-
-            # 数据点数
-            data_count = len(device_info.get("timestamps", []))
-            count_item = QTableWidgetItem(str(data_count))
-            self.device_overview_table.setItem(row, 12, count_item)
-
             # 运行时长
             runtime_text = self.format_runtime(device_info)
             runtime_item = QTableWidgetItem(runtime_text)
-            self.device_overview_table.setItem(row, 13, runtime_item)
+            self.device_overview_table.setItem(row, 5, runtime_item)
 
         except Exception as e:
             self.logger.error(f"行数据填充失败: {e}")
-
-    def populate_sensor_data(self, row: int, device_info: dict):
-        """填充传感器数据列"""
-        try:
-            # 温度
-            temp_val = self.get_latest_sensor_value(
-                device_info, "temperature", "{:.1f}"
-            )
-            temp_item = QTableWidgetItem(temp_val)
-            self.device_overview_table.setItem(row, 7, temp_item)
-
-            # 压力
-            pressure_val = self.get_latest_sensor_value(
-                device_info, "pressure", "{:.2f}"
-            )
-            pressure_item = QTableWidgetItem(pressure_val)
-            self.device_overview_table.setItem(row, 8, pressure_item)
-
-            # 功率
-            power_val = self.get_latest_sensor_value(device_info, "rf_power", "{:.0f}")
-            power_item = QTableWidgetItem(power_val)
-            self.device_overview_table.setItem(row, 9, power_item)
-
-            # 端点信号
-            endpoint_val = self.get_latest_sensor_value(
-                device_info, "endpoint", "{:.3f}"
-            )
-            endpoint_item = QTableWidgetItem(endpoint_val)
-            self.device_overview_table.setItem(row, 10, endpoint_item)
-
-        except Exception as e:
-            self.logger.error(f"传感器数据填充失败: {e}")
-
-    def get_latest_sensor_value(
-        self, device_info: dict, sensor_key: str, format_str: str
-    ) -> str:
-        """获取最新的传感器值"""
-        try:
-            sensor_data = device_info.get(sensor_key)
-            if sensor_data and len(sensor_data) > 0:
-                latest_value = sensor_data[-1]
-                return format_str.format(latest_value)
-            return "--"
-        except:
-            return "--"
 
     def format_update_time(self, last_update) -> str:
         """格式化更新时间"""

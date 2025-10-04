@@ -8,10 +8,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from collections import defaultdict, deque
-import time
 
 from core.data_bus import data_bus, DataChannel, DataMessage
-from core.data_bus import DataChannel, DataMessage
+from core.device_manager import device_manager
 from .DeviceControlPanel import DeviceControlPanel
 from .DeviceOverviewTable import DeviceOverviewTable
 from .DeviceChartsWidget import DeviceChartsWidget
@@ -21,14 +20,13 @@ from .DataDashboardWidget import DashboardWidget
 class DataVisualizationWidget(QWidget):
     device_selected = Signal(str)
     visualization_mode_changed = Signal(str)
-    device_count_changed = Signal(int)
     connection_status_changed = Signal(bool, str)
     statistics_updated = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger("DataVisualizationWidget")
-
+        device_manager.device_list_updated.connect(self.on_device_list_updated)
         # 🔥 简化数据存储 - 只保留必要字段
         self.device_data = defaultdict(
             lambda: {
@@ -39,7 +37,6 @@ class DataVisualizationWidget(QWidget):
             }
         )
 
-        self.active_devices = set()
         self.current_device = None
 
         self.setup_ui()
@@ -79,11 +76,27 @@ class DataVisualizationWidget(QWidget):
         widget.setObjectName("dashboardPlaceholder")
         return widget
 
+    @Slot(list)
+    def on_device_list_updated(self, device_ids):
+        logging.debug(f"DataVisualizationWidget: 设备列表更新 - {device_ids}")
+        # 获取所有设备详细信息
+        all_devices = []
+        for did in device_ids:
+            info = device_manager.get_device_info(did)
+            if info is not None:
+                all_devices.append(info)
+
+        # 1. 更新DeviceOverviewTable（显示所有设备）
+        self.table_widget.update_devices_data(all_devices)
+
+        # 2. 只筛选在线设备，更新DeviceControlPanel
+        online_devices = [d["device_id"] for d in all_devices if d.get("online", False)]
+        self.control_panel.update_device_list(online_devices)
+
     def setup_databus(self):
         """数据总线订阅"""
         data_bus.subscribe(DataChannel.TELEMETRY_DATA, self.on_telemetry_data)
-        data_bus.subscribe(DataChannel.DEVICE_EVENTS, self.on_device_events)
-        data_bus.subscribe(DataChannel.ALERTS, self.on_alerts)  # 可选：添加告警订阅
+        data_bus.subscribe(DataChannel.ALERTS, self.on_alerts)
 
     def setup_timer(self):
         """单一定时器同步"""
@@ -110,38 +123,37 @@ class DataVisualizationWidget(QWidget):
             alert_data = message.data
             self.logger.info(f"设备告警: {device_id} - {alert_data}")
 
-    # 🔥 简化数据处理
+    #
     @Slot()
     def on_telemetry_data(self, message: DataMessage):
-        """处理遥测数据 - 简化版本"""
+        """处理遥测数据"""
         device_id = message.device_id
         if not device_id:
             return
-
+        raw_data = message.data
+        sample = raw_data.get("sample_record", {})
+        normalized = {
+            "device_id": device_id,
+            "device_type": raw_data.get("device_type", "UNKNOWN"),
+            "recipe": sample.get("recipe", "--"),
+            "step": sample.get("step", "--"),
+            "lot_number": sample.get("lot_number", "--"),
+            "wafer_id": sample.get("wafer_id", "--"),
+            "temperature": sample.get("temperature"),
+            "pressure": sample.get("pressure"),
+            "rf_power": sample.get("rf_power"),
+            "endpoint": sample.get("endpoint"),
+            "channel": sample.get("channel"),
+            "gas": {k[4:]: v for k, v in sample.items() if k.startswith("gas_")},
+            "last_update": message.timestamp,
+        }
         # 直接更新设备数据
         device = self.device_data[device_id]
-        device["latest"] = message.data
+        device["latest"] = normalized
         device["last_update"] = message.timestamp
-        device["history"].append({"timestamp": message.timestamp, **message.data})
+        device["history"].append({"timestamp": message.timestamp, **normalized})
 
-        # 更新活跃设备
-        if device_id not in self.active_devices:
-            self.active_devices.add(device_id)
-            self.device_count_changed.emit(len(self.active_devices))
-
-    @Slot()
-    def on_device_events(self, message: DataMessage):
-        """处理设备事件 - 简化版本"""
-        device_id = message.device_id
-        if not device_id:
-            return
-
-        event_data = message.data
-        if event_data.get("event_type") == "device_discovered":
-            self.device_data[device_id]["info"] = event_data
-            self.active_devices.add(device_id)
-
-    # 🔥 简化同步逻辑
+    # 简化同步逻辑
     def sync_data(self):
         """统一数据同步 - 替代多个定时器"""
         # 更新表格数据
@@ -149,16 +161,8 @@ class DataVisualizationWidget(QWidget):
             self.sync_table_data()
         elif self.stacked_widget.currentIndex() == 1 and self.current_device:
             self.sync_dashboard_data()
-
-        # 更新图表数据
         elif self.stacked_widget.currentIndex() == 2 and self.current_device:
             self.sync_chart_data()
-
-        # 更新控制面板
-        self.sync_control_panel()
-
-        # 清理过期设备
-        self.cleanup_devices()
 
     def sync_table_data(self):
         """同步表格数据"""
@@ -192,7 +196,6 @@ class DataVisualizationWidget(QWidget):
             return
 
         try:
-            # 直接调用图表组件的数据更新方法
             self.charts_widget.update_from_history_data(self.current_device, history)
 
         except Exception as e:
@@ -217,41 +220,7 @@ class DataVisualizationWidget(QWidget):
                 {"device_id": self.current_device, "data_points": history}
             )
 
-    def sync_control_panel(self):
-        """同步控制面板"""
-        # 更新设备列表
-        device_list = sorted(list(self.active_devices))
-        self.control_panel.update_device_list(device_list)
-
-        # 更新当前设备状态
-        if self.current_device and self.current_device in self.device_data:
-            device = self.device_data[self.current_device]
-            self.control_panel.update_device_status(
-                self.current_device,
-                {
-                    "last_update": device.get("last_update", 0),
-                    "latest_data": device.get("latest", {}),
-                    **device.get("info", {}),
-                },
-            )
-
-    def cleanup_devices(self):
-        """清理离线设备"""
-        current_time = time.time()
-        offline_devices = []
-
-        for device_id in list(self.active_devices):
-            last_update = self.device_data[device_id].get("last_update", 0)
-            if current_time - last_update > 60:  # 60秒离线
-                offline_devices.append(device_id)
-
-        for device_id in offline_devices:
-            self.active_devices.discard(device_id)
-
-        if offline_devices:
-            self.device_count_changed.emit(len(self.active_devices))
-
-    # 🔥 简化用户交互
+    # 简化用户交互
     @Slot(str)
     def set_current_device(self, device_id: str):
         """设置当前设备 - 统一入口"""
@@ -279,7 +248,7 @@ class DataVisualizationWidget(QWidget):
             self.stacked_widget.setCurrentIndex(view_mapping[view_name])
             self.visualization_mode_changed.emit(view_name)
 
-    # 🔥 简化操作方法
+    # 简化操作方法
     @Slot()
     def refresh_data(self):
         """刷新数据"""
@@ -300,10 +269,10 @@ class DataVisualizationWidget(QWidget):
     def get_current_status(self) -> dict:
         """获取当前状态"""
         return {
-            "active_devices": len(self.active_devices),
+            # "active_devices": len(self.active_devices),
             "current_device": self.current_device,
             "current_view": self.stacked_widget.currentIndex(),
-            "devices_list": sorted(list(self.active_devices)),
+            # "devices_list": sorted(list(self.active_devices)),
         }
 
     def cleanup(self):

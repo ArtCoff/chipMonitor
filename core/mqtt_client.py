@@ -8,13 +8,10 @@ from PySide6.QtCore import QObject, Signal, QTimer, Qt
 from .thread_pool import thread_pool, TaskType, TaskPriority
 from .data_bus import data_bus, DataChannel, DataMessage
 
-# from .enhanced_data_bus import enhanced_data_bus
-
 
 class MqttManager(QObject):
     # 定义信号
     connection_changed = Signal(bool, str)  # 连接状态变化：(是否连接, 消息)
-    device_discovered = Signal(str, dict)  # 新设备发现
     statistics_updated = Signal(dict)  # 统计信息更新
     topic_subscribed = Signal(str, bool)  # 主题订阅结果：(主题, 是否成功)
     connection_status = Signal(str)  # 连接状态文本
@@ -198,7 +195,7 @@ class MqttManager(QObject):
             self.stats["connection_time"] = time.time()
 
             success_msg = "MQTT连接成功"
-            logging.info(success_msg)
+            logging.info("MQTT连接成功")
             self.connection_changed.emit(True, success_msg)
             self.connection_status.emit("已连接")
 
@@ -256,7 +253,7 @@ class MqttManager(QObject):
             self.stats["messages_received"] += 1
             self.stats["last_message_time"] = time.time()
             self.stats["bytes_received"] += len(msg.payload)
-            logging.info(f"📥 收到MQTT消息: {topic} | {len(payload)}字节")
+            # logging.info(f"📥 收到MQTT消息: {topic} | {len(payload)}字节")
 
             if self._is_device_telemetry_topic(topic):
                 # 提交到线程池
@@ -264,7 +261,7 @@ class MqttManager(QObject):
                 task_id = (
                     f"mqtt_{self.stats['messages_received']}_{int(time.time()*1000)}"
                 )
-                logging.info(f"🔄 提交解析任务: {task_id} | {topic}")
+                # logging.info(f"🔄 提交解析任务: {task_id} | {topic}")
 
                 success = thread_pool.submit(
                     TaskType.DATA_PROCESSING,  # 或 ANALYTICS
@@ -278,7 +275,8 @@ class MqttManager(QObject):
                     timeout=5.0,  # 5秒超时
                 )
                 if success:
-                    logging.info(f"✅ 任务提交成功: {task_id}")
+                    pass
+                    # logging.info(f"✅ 任务提交成功: {task_id}")
                 else:
                     logging.error(f"❌ 任务提交失败: {task_id}")
 
@@ -318,7 +316,6 @@ class MqttManager(QObject):
                         topic, payload, qos, f"Json解析失败: {e}"
                     )
             else:
-                # 自动检测格式
                 try:
                     data = msgpack.unpackb(payload, raw=False, strict_map_key=False)
                     format_type = "MessagePack"
@@ -369,6 +366,10 @@ class MqttManager(QObject):
                     "device_id": device_id,
                     "device_type": device_type,
                     "vendor": vendor,
+                    "event": "online",
+                    "timestamp": time.time(),
+                    "topic": topic,
+                    "status": {"last_update": time.time()},
                 }
             return None
 
@@ -424,7 +425,7 @@ class MqttManager(QObject):
             result.update(mapped_fields)
             result["sample_record"] = mapped_fields
 
-            # 🔥 只有多条记录时才进行时间跨度分析
+            # 只有多条记录时才进行时间跨度分析
             if batch_size > 1:
                 time_span_info = self._analyze_batch_timespan(data)
                 result.update(time_span_info)
@@ -657,12 +658,18 @@ class MqttManager(QObject):
                     "device_id": device_id,
                     "device_type": result.get("device_type", "UNKNOWN"),
                     "vendor": result.get("vendor", "UNKNOWN"),
-                    "discovered_time": time.time(),
+                    "event": "online",
+                    "timestamp": time.time(),
                     "topic": result.get("topic", ""),
                 }
-                self.device_discovered.emit(device_id, device_info)
+                data_bus.publish(
+                    channel=DataChannel.DEVICE_EVENTS,
+                    source="mqtt_client",
+                    data=device_info,
+                    device_id=device_id,
+                )
 
-            # 🔥 增强的日志记录 - 区分批次和单条
+            # 增强的日志记录 - 区分批次和单条
             parse_success = result.get("parse_success", True)
 
             if parse_success:
@@ -675,10 +682,9 @@ class MqttManager(QObject):
                     device_id=device_id,
                 )
                 if success:
-                    print(f"✅ DataBus发布成功: {device_id}")
-                    logging.info(f"✅ DataBus发布成功: {device_id}")
+                    pass
+                    # logging.info(f"✅ DataBus发布成功: {device_id}")
                 else:
-                    print(f"❌ DataBus发布失败: {device_id}")
                     logging.error(f"❌ DataBus发布失败: {device_id}")
 
             else:

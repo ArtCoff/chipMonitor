@@ -15,7 +15,7 @@ from .thread_pool import thread_pool, TaskType, TaskPriority
 
 
 class DatabaseManager(QObject):
-    """优化的数据库管理器 - 支持批量操作和查询"""
+    """数据库管理器"""
 
     # 信号定义
     connection_changed = Signal(bool, str)
@@ -150,29 +150,29 @@ class DatabaseManager(QObject):
         """初始化数据库表结构"""
         try:
             with conn.cursor() as cursor:
-                # 🔥 遥测数据表 - 优化索引
                 cursor.execute(
                     """
-                    CREATE TABLE IF NOT EXISTS telemetry_data (
-                        id BIGSERIAL PRIMARY KEY,
-                        device_id VARCHAR(100) NOT NULL,
-                        channel VARCHAR(50) NOT NULL,
-                        source VARCHAR(100) NOT NULL,
-                        temperature DECIMAL(10,3),
-                        pressure DECIMAL(10,3),
-                        rf_power DECIMAL(10,3),
-                        endpoint DECIMAL(10,3),
-                        humidity DECIMAL(10,3),
-                        vibration DECIMAL(10,3),
-                        data_timestamp TIMESTAMPTZ NOT NULL,
-                        created_at TIMESTAMPTZ DEFAULT NOW()
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_telemetry_device_time 
-                    ON telemetry_data(device_id, data_timestamp DESC);
-                    CREATE INDEX IF NOT EXISTS idx_telemetry_created 
-                    ON telemetry_data(created_at DESC);
-                    CREATE INDEX IF NOT EXISTS idx_telemetry_channel
-                    ON telemetry_data(channel);
+                CREATE TABLE IF NOT EXISTS telemetry_data (
+                    id BIGSERIAL PRIMARY KEY,
+                    device_id VARCHAR(100) NOT NULL,        -- 设备ID
+                    device_type VARCHAR(100) NOT NULL,      -- 设备类型
+                    channel INTEGER NOT NULL,               -- 通道
+                    recipe VARCHAR(100),                    -- 工艺配方
+                    step VARCHAR(100),                      -- 工艺步骤
+                    lot_number VARCHAR(100),                -- 批次号
+                    wafer_id VARCHAR(50),                   -- 晶圆号
+                    pressure DECIMAL(10,3),                 -- 压力
+                    temperature DECIMAL(10,3),              -- 温度
+                    rf_power DECIMAL(10,3),                 -- RF功率
+                    endpoint DECIMAL(10,4),                 -- 终点检测信号
+                    gas JSONB,                              -- 气体流量
+                    timestamp_us BIGINT NOT NULL,           -- 原始微秒时间戳
+                    data_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- 解析后的时间
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_telemetry_device_time ON telemetry_data(device_id, timestamp_us DESC);
+                CREATE INDEX IF NOT EXISTS idx_telemetry_lot ON telemetry_data(lot_number);
+                CREATE INDEX IF NOT EXISTS idx_telemetry_wafer ON telemetry_data(wafer_id);
                 """
                 )
 
@@ -238,66 +238,131 @@ class DatabaseManager(QObject):
                     ON error_logs(error_type);
                 """
                 )
-
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS devices (
+                        device_id VARCHAR(100) PRIMARY KEY,
+                        device_type VARCHAR(100),
+                        vendor VARCHAR(100),
+                        first_seen TIMESTAMPTZ DEFAULT NOW(),
+                        last_seen TIMESTAMPTZ,
+                        description TEXT
+                    );
+                    """
+                )
                 conn.commit()
-                self.logger.info("✅ 数据库表结构初始化完成")
+                self.logger.info("数据库表结构初始化完成")
 
         except Exception as e:
             conn.rollback()
             self.logger.error(f"初始化数据库表失败: {e}")
             raise
 
-    # 🔥 批量插入方法
+    # 批量插入方法
     def batch_insert_telemetry(self, messages: List) -> dict:
         """批量插入遥测数据"""
         if not self.is_connected():
             return {"success": False, "processed": 0, "errors": ["数据库未连接"]}
 
-        try:
-            values = []
-            for msg in messages:
-                data = msg.data if hasattr(msg, "data") else msg
-                values.append(
-                    (
-                        getattr(msg, "device_id", "") or "",
-                        (
-                            getattr(msg, "channel", {}).value
-                            if hasattr(getattr(msg, "channel", {}), "value")
-                            else "telemetry_data"
-                        ),
-                        getattr(msg, "source", "") or "",
-                        data.get("temperature") if isinstance(data, dict) else None,
-                        data.get("pressure") if isinstance(data, dict) else None,
-                        data.get("rf_power") if isinstance(data, dict) else None,
-                        data.get("endpoint") if isinstance(data, dict) else None,
-                        data.get("humidity") if isinstance(data, dict) else None,
-                        data.get("vibration") if isinstance(data, dict) else None,
-                        datetime.fromtimestamp(getattr(msg, "timestamp", time.time())),
-                    )
-                )
+        values = []
+        for msg in messages:
+            raw_data = getattr(msg, "data", {})
+            if not isinstance(raw_data, dict):
+                self.logger.warning("遥测消息 data 不是 dict")
+                continue
 
+            # 从 sample_record 提取业务字段（这是 _map_fields 的结果）
+            record = raw_data.get("sample_record")
+            if not isinstance(record, dict):
+                self.logger.warning("遥测数据缺少 sample_record 字段")
+                continue
+
+            # === 提取字段（使用映射后的键）===
+            device_id = record.get("equipment_id") or raw_data.get("device_id")
+            if not device_id:
+                self.logger.warning("遥测数据缺少 device_id")
+                continue
+
+            device_type = raw_data.get("device_type", "UNKNOWN")
+            channel = record.get("channel")
+            recipe = record.get("recipe")
+            step = record.get("step")
+            lot_number = record.get("lot_number")
+            wafer_id = record.get("wafer_id")
+            pressure = record.get("pressure")
+            temperature = record.get("temperature")
+            rf_power = record.get("rf_power")
+            endpoint = record.get("endpoint")
+
+            # 重建 gas 字典（从展平字段还原）
+            gas = {}
+            for key, value in record.items():
+                if key.startswith("gas_"):
+                    gas_key = key[4:]
+                    gas[gas_key] = value
+            gas_json = json.dumps(gas) if gas else None
+
+            # 时间戳：优先使用设备原始微秒时间戳
+            timestamp_us = record.get("device_timestamp")
+            if timestamp_us is not None:
+                try:
+                    timestamp_us = int(timestamp_us)
+                    data_timestamp = datetime.fromtimestamp(timestamp_us / 1_000_000)
+                except (ValueError, OSError, OverflowError):
+                    self.logger.warning(f"无效设备时间戳: {timestamp_us}")
+                    timestamp_us = None
+                    data_timestamp = datetime.now()
+            else:
+                # 回退到主机解析时间
+                host_ts = raw_data.get("timestamp")  # 秒
+                data_timestamp = (
+                    datetime.fromtimestamp(host_ts) if host_ts else datetime.now()
+                )
+                timestamp_us = int(data_timestamp.timestamp() * 1_000_000)
+
+            # === 构造插入值（顺序必须与 telemetry_data 表列一致）===
+            values.append(
+                (
+                    device_id,
+                    device_type,
+                    channel,
+                    recipe,
+                    step,
+                    lot_number,
+                    wafer_id,
+                    pressure,
+                    temperature,
+                    rf_power,
+                    endpoint,
+                    gas_json,
+                    timestamp_us,
+                    data_timestamp,
+                )
+            )
+
+        if not values:
+            return {"success": True, "processed": 0, "errors": []}
+
+        try:
             conn = self._connection_pool.getconn()
             try:
                 with conn.cursor() as cursor:
                     query = """
-                        INSERT INTO telemetry_data 
-                        (device_id, channel, source, temperature, pressure, rf_power, 
-                         endpoint, humidity, vibration, data_timestamp)
-                        VALUES %s
+                        INSERT INTO telemetry_data (
+                            device_id, device_type, channel, recipe, step,
+                            lot_number, wafer_id, pressure, temperature,
+                            rf_power, endpoint, gas, timestamp_us, data_timestamp
+                        ) VALUES %s
                     """
                     execute_values(cursor, query, values, page_size=1000)
                 conn.commit()
-
-                result = {"success": True, "processed": len(messages), "errors": []}
+                result = {"success": True, "processed": len(values), "errors": []}
                 self.batch_stats["telemetry_batches"] += 1
-                self.batch_stats["total_records"] += len(messages)
-
+                self.batch_stats["total_records"] += len(values)
                 self.batch_completed.emit("telemetry", result)
                 return result
-
             finally:
                 self._connection_pool.putconn(conn)
-
         except Exception as e:
             error_msg = f"批量插入遥测数据失败: {e}"
             self.logger.error(error_msg)
@@ -481,7 +546,7 @@ class DatabaseManager(QObject):
             self.batch_failed.emit("errors", error_msg)
             return {"success": False, "processed": 0, "errors": [error_msg]}
 
-    # 🔥 增强的查询方法
+    # 查询方法
     def query_telemetry_data(
         self,
         device_id: Optional[str] = None,
@@ -906,6 +971,97 @@ class DatabaseManager(QObject):
 
         except Exception as e:
             self.logger.error(f"关闭数据库管理器失败: {e}")
+
+    # 设备信息 upsert
+    def upsert_device_info(self, info: dict) -> bool:
+        """
+        插入或更新设备信息（如已存在则更新last_seen、status等）
+        """
+        self.logger.debug(f"准备写入设备信息: {info}")
+        if not self.is_connected():
+            return False
+        try:
+            device_id = info.get("device_id")
+            if not device_id:
+                return False
+            # 转换时间戳为 datetime
+            last_update_ts = info.get("status", {}).get("last_update") or info.get(
+                "timestamp"
+            )
+            last_seen = (
+                datetime.fromtimestamp(last_update_ts)
+                if last_update_ts
+                else datetime.now()
+            )
+            conn = self._connection_pool.getconn()
+
+            try:
+                with conn.cursor() as cursor:
+                    query = """
+                        INSERT INTO devices (device_id, device_type, vendor, first_seen, last_seen, description)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (device_id) DO UPDATE SET
+                            device_type=EXCLUDED.device_type,
+                            vendor=EXCLUDED.vendor,
+                            last_seen=EXCLUDED.last_seen,
+                            description=EXCLUDED.description
+                    """
+                    cursor.execute(
+                        query,
+                        (
+                            info.get("device_id"),
+                            info.get("device_type"),
+                            info.get("vendor"),
+                            info.get("first_seen") or datetime.now(),
+                            last_seen,
+                            info.get("description", ""),
+                        ),
+                    )
+                conn.commit()
+                return True
+            finally:
+                self._connection_pool.putconn(conn)
+        except Exception as e:
+            self.logger.error(f"upsert_device_info失败: {e}")
+            return False
+
+    # 查询所有设备信息
+    def get_all_devices(self) -> list:
+        """
+        获取所有设备信息（返回list[dict]）
+        """
+        if not self.is_connected():
+            return []
+        try:
+            conn = self._connection_pool.getconn()
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("SELECT * FROM devices ORDER BY device_id")
+                    return [dict(row) for row in cursor.fetchall()]
+            finally:
+                self._connection_pool.putconn(conn)
+        except Exception as e:
+            self.logger.error(f"get_all_devices失败: {e}")
+            return []
+
+    # 可选：获取单个设备信息
+    def get_device_info(self, device_id: str) -> Optional[dict]:
+        if not self.is_connected():
+            return None
+        try:
+            conn = self._connection_pool.getconn()
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute(
+                        "SELECT * FROM devices WHERE device_id=%s", (device_id,)
+                    )
+                    row = cursor.fetchone()
+                    return dict(row) if row else None
+            finally:
+                self._connection_pool.putconn(conn)
+        except Exception as e:
+            self.logger.error(f"get_device_info失败: {e}")
+            return None
 
 
 # 全局实例

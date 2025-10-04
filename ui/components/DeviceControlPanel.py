@@ -74,7 +74,7 @@ class DeviceControlPanel(QWidget):
         # 设备下拉框
         self.device_combo = QComboBox()
         self.device_combo.setObjectName("deviceCombo")
-        self.device_combo.setMinimumHeight(35)
+        self.device_combo.setMinimumHeight(20)
         self.device_combo.currentTextChanged.connect(self.on_device_changed)
         layout.addWidget(self.device_combo)
 
@@ -128,7 +128,7 @@ class DeviceControlPanel(QWidget):
             ("设备类型", "device_type"),
             ("当前工艺", "recipe"),
             ("工艺步骤", "step"),
-            ("批次号", "lot_id"),
+            ("批次号", "lot_number"),
             ("晶圆号", "wafer_id"),
         ]
 

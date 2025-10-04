@@ -185,7 +185,6 @@ class StackControlWidget(QWidget):
         )
 
         layout.addWidget(self.current_mode_label)
-        layout.addWidget(self.device_status_label)
 
         return status_frame
 

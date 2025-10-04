@@ -54,7 +54,7 @@ class Task:
 
 
 class ThreadPool(QObject):
-    """工业级线程池，支持优先级、重试、超时、指标监控、任务取消"""
+    """线程池，支持优先级、重试、超时、指标监控、任务取消"""
 
     task_completed = Signal(str, object)
     task_failed = Signal(str, str)

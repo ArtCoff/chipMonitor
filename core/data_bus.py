@@ -133,7 +133,7 @@ class DataBus(QObject):
                     self.logger.debug(f"频道 {channel.value} 没有订阅者")
                     return True
 
-                # 🔥 同步投递所有消息
+                # 同步投递所有消息
                 self._deliver_sync(live_callbacks, message)
 
                 # 更新统计
@@ -220,5 +220,5 @@ class DataBus(QObject):
         return cleaned_count
 
 
-# 🔥 全局数据总线实例
+# 全局数据总线实例
 data_bus = DataBus()

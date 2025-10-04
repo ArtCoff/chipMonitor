@@ -10,17 +10,17 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QIcon
-from typing import Any
 from utils.path import QSS_DIR, ICON_DIR
-from .components.DataVisualizationWidget import DataVisualizationWidget
 from .components.MenuBar import MenuBar
+from .analysis_window import HistoryDataWindow
 from .components.StackControl import StackControlWidget
 from .components.NetworkControlPanel import NetworkControlPanel
 from .components.DatabaseControlPanel import DatabaseControlPanel
+from .components.DataVisualizationWidget import DataVisualizationWidget
+from core.data_bus import data_bus
 from core.mqtt_client import mqtt_manager
-from core.thread_pool import thread_pool, TaskType, TaskPriority
-from core.data_bus import data_bus, DataChannel
 from core.database_manager import db_manager
+from core.device_manager import device_manager
 from services.database_persistence import database_persistence_service
 
 
@@ -30,12 +30,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("ChipMonitor - 半导体工艺监控系统")
         self.setWindowIcon(QIcon(str(ICON_DIR / "icon_monitoring.png")))
-        self.resize(800, 600)
+        self.resize(1200, 600)
 
         self.logger = logging.getLogger("MainWindow")
+        self.device_data_dict = {}
 
         # 窗口引用
-        self.history_window = None
+
+        self.history_data_window = None
         self.NetworkControlPanel = None
         self.database_panel = None
 
@@ -47,14 +49,16 @@ class MainWindow(QMainWindow):
         self.persistence_status_timer.timeout.connect(self.update_persistence_status)
         self.persistence_status_timer.start(10000)  # 10秒检查一次持久化服务状态
 
+        device_manager.load_devices_from_db()
         # 当前可视化模式
         self.current_mode = "table"
-        # 🔥 添加启动服务定时器
+        # 添加启动服务定时器
         self.startup_timer = QTimer()
         self.startup_timer.setSingleShot(True)
         self.startup_timer.timeout.connect(self.auto_start_services)
 
         # 初始化UI和样式
+
         self.setup_ui()
         self.load_qss_style()
         self.setup_signal_connections()
@@ -73,7 +77,7 @@ class MainWindow(QMainWindow):
         # 1. 菜单栏
         self.menu_bar = MenuBar()
         self.menu_bar.setObjectName("menuBar")
-        self.menu_bar.setFixedHeight(80)  # 🔥 设置固定高度
+        self.menu_bar.setFixedHeight(80)  #  设置固定高度
         main_layout.addWidget(self.menu_bar)
 
         # 2. 可视化区域（主要内容）
@@ -132,18 +136,12 @@ class MainWindow(QMainWindow):
         self.connection_indicator = QLabel("● 未连接")
         self.connection_indicator.setStyleSheet("color: red; font-weight: bold;")
 
-        # 设备和数据计数
-        self.device_count_label = QLabel("设备: 0")
-        self.data_count_label = QLabel("数据: 0")
-
         # 可视化模式指示器
         self.visualization_mode_label = QLabel("模式: 表格")
 
         # 添加到状态栏
         self.status_bar.addWidget(self.status_label, 1)
         self.status_bar.addPermanentWidget(self.visualization_mode_label)
-        self.status_bar.addPermanentWidget(self.device_count_label)
-        self.status_bar.addPermanentWidget(self.data_count_label)
         self.status_bar.addPermanentWidget(self.connection_indicator)
 
     def load_qss_style(self):
@@ -169,32 +167,21 @@ class MainWindow(QMainWindow):
             self.menu_bar.network_debug_signal.connect(self.open_network_debug_window)
         if hasattr(self.menu_bar, "system_debug_signal"):
             self.menu_bar.system_debug_signal.connect(self.open_system_debug_window)
-        if hasattr(self.menu_bar, "etl_config_signal"):
-            self.menu_bar.etl_config_signal.connect(self.open_etl_config_window)
+
         if hasattr(self.menu_bar, "settings_signal"):
             self.menu_bar.settings_signal.connect(self.open_settings_window)
-        if hasattr(self.menu_bar, "redis_signal"):
-            self.menu_bar.database_signal.connect(self.open_redis_window)
+        if hasattr(self.menu_bar, "history_signal"):
+            self.menu_bar.history_signal.connect(self.open_history_window)
         if hasattr(self.menu_bar, "database_signal"):
             self.menu_bar.database_signal.connect(self.open_database_window)
         if hasattr(self.menu_bar, "exit_signal"):
             self.menu_bar.exit_signal.connect(self.close)
-        if hasattr(self.menu_bar, "mqtt_toggle_requested"):
-            self.menu_bar.mqtt_toggle_requested.connect(self.on_mqtt_toggle_requested)
-        if hasattr(self.menu_bar, "persistence_toggle_requested"):
-            self.menu_bar.persistence_toggle_requested.connect(
-                self.on_persistence_toggle_requested
-            )
-        if hasattr(self.menu_bar, "status_refresh_requested"):
-            self.menu_bar.status_refresh_requested.connect(self.refresh_all_status)
-
+            # 连接信号到UI组件
         # StackControl信号连接
         if self.stack_control_widget:
             self.stack_control_widget.mode_changed.connect(self.on_mode_changed)
 
         # 可视化组件信号连接
-        if self.visualization_widget:
-            self.visualization_widget.device_selected.connect(self.on_device_selected)
         mqtt_manager.connection_changed.connect(
             self.on_mqtt_connection_changed, Qt.QueuedConnection
         )
@@ -202,23 +189,11 @@ class MainWindow(QMainWindow):
             self.on_mqtt_connection_status, Qt.QueuedConnection
         )
 
-        # 设备发现信号
-        mqtt_manager.device_discovered.connect(
-            self.on_device_discovered, Qt.QueuedConnection
-        )
-
         # 统计信息信号
         mqtt_manager.statistics_updated.connect(
             self.on_mqtt_statistics_updated, Qt.QueuedConnection
         )
-        # DataBus系统信号
-        data_bus.message_published.connect(
-            self.on_databus_message_published, Qt.QueuedConnection
-        )
-        data_bus.message_delivered.connect(
-            self.on_databus_message_delivered, Qt.QueuedConnection
-        )
-        # 🔥 添加数据库持久化服务信号连接
+        # 添加数据库持久化服务信号连接
         database_persistence_service.service_started.connect(
             self.on_persistence_service_started, Qt.QueuedConnection
         )
@@ -234,7 +209,6 @@ class MainWindow(QMainWindow):
     def on_mqtt_statistics_updated(self, stats: dict):
         """更新MQTT统计信息到UI"""
         try:
-            # 🔥 简化统计显示 - 移除Redis相关
             messages_received = stats.get("messages_received", 0)
             connection_duration = int(stats.get("connection_duration", 0))
 
@@ -306,33 +280,6 @@ class MainWindow(QMainWindow):
 
     # ================== 可视化组件事件处理 ==================
 
-    @Slot(str)
-    def on_device_selected(self, device_id):
-        """设备选择事件处理 - 同步到控制器"""
-        try:
-            self.logger.info(f"选择设备: {device_id}")
-
-            # 🔥 设置控制器的当前设备
-            self.visualization_controller.set_current_device(device_id)
-
-            # 更新UI显示
-            self.status_label.setText(f"正在监控设备: {device_id}")
-            self.visualization_status.setText(f"● 监控设备: {device_id}")
-
-            # 获取设备信息显示更详细的状态
-            device_data = self.visualization_controller.get_device_data(device_id)
-            if device_data:
-                device_type = device_data.get("device_type", "UNKNOWN")
-                vendor = device_data.get("vendor", "UNKNOWN")
-                self.status_label.setText(
-                    f"监控设备: {device_id} [{vendor} {device_type}]"
-                )
-
-        except Exception as e:
-            self.logger.error(f"处理设备选择失败: {e}")
-
-    # ================== 调试窗口管理 ==================
-
     @Slot()
     def open_network_debug_window(self):
         """打开网络调试窗口"""
@@ -352,18 +299,26 @@ class MainWindow(QMainWindow):
         self.logger.info("打开系统调试窗口")
 
     @Slot()
-    def open_etl_config_window(self):
-        """打开ETL配置窗口"""
-        self.logger.info("打开ETL配置窗口")
-
-    @Slot()
     def open_settings_window(self):
         """打开设置窗口"""
         self.logger.info("打开设置窗口")
 
     @Slot()
-    def open_redis_window(self):
-        self.logger.info("打开Redis管理窗口")
+    def open_history_window(self):
+        try:
+            if not self.history_data_window:
+                self.history_data_window = HistoryDataWindow(self)
+
+                # 连接信号
+                self.history_data_window.data_selected.connect(
+                    self.on_history_data_selected
+                )
+
+            self.history_data_window.show_window()
+            self.logger.info("历史数据查询窗口已打开")
+
+        except Exception as e:
+            self.logger.error(f"打开历史数据查询窗口失败: {e}")
 
     @Slot()
     def open_database_window(self):
@@ -395,76 +350,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"处理数据库配置变更失败: {e}")
 
-    # ================== 状态更新方法 ==================
-
-    def update_connection_status(self, connected: bool, message: str = ""):
-        """更新连接状态"""
-        if connected:
-            self.status_label.setText("已连接到服务")
-            self.connection_indicator.setText("● 已连接")
-            self.connection_indicator.setStyleSheet("color: green; font-weight: bold;")
-            self.visualization_status.setText("● 数据流活跃")
-            self.visualization_status.setStyleSheet(
-                "color: #27AE60; font-weight: bold;"
-            )
-        else:
-            self.status_label.setText("未连接到服务")
-            self.connection_indicator.setText("● 未连接")
-            self.connection_indicator.setStyleSheet("color: red; font-weight: bold;")
-            self.visualization_status.setText("● 等待连接")
-            self.visualization_status.setStyleSheet(
-                "color: #E74C3C; font-weight: bold;"
-            )
-
-    def update_device_count(self, count: int):
-        """更新设备计数"""
-        self.device_count_label.setText(f"设备: {count}")
-        if self.stack_control_widget:
-            self.stack_control_widget.update_device_count(count)
-
-    def update_data_count(self, count: int):
-        """更新数据计数"""
-        self.data_count_label.setText(f"数据: {count}")
-
     # ================== 窗口事件处理 ==================
-
-    def closeEvent(self, event):
-        """关闭事件处理"""
-        try:
-            self.logger.info("关闭主窗口...")
-
-            # 关闭子窗口
-            if hasattr(self, "history_window") and self.history_window:
-                self.history_window.close()
-            if hasattr(self, "network_debug_window") and self.network_debug_window:
-                self.network_debug_window.close()
-
-            # 停止可视化组件
-            if self.visualization_widget and hasattr(
-                self.visualization_widget, "cleanup"
-            ):
-                self.visualization_widget.cleanup()
-
-            super().closeEvent(event)
-            self.logger.info("主窗口已关闭")
-
-        except Exception as e:
-            self.logger.error(f"关闭窗口时发生错误: {e}")
-            super().closeEvent(event)
-
-    def showEvent(self, event):
-        """窗口显示事件"""
-        super().showEvent(event)
-        self.logger.info("主窗口已显示")
-        self.status_label.setText("系统就绪 - 界面加载完成")
-        if not self.startup_timer.isActive():
-            self.startup_timer.start(2000)  # 2秒后启动服务
 
     @Slot(bool, str)
     def on_mqtt_connection_changed(self, connected: bool, message: str):
         """处理MQTT连接状态变化"""
         try:
-            self.update_connection_status(connected, message)
+            # self.update_connection_status(connected, message)
 
             if connected:
                 self.status_label.setText("MQTT连接成功")
@@ -484,88 +376,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"处理MQTT连接状态失败: {e}")
 
-    @Slot(str, dict)
-    def on_device_discovered(self, device_id: str, device_info: dict):
-        """处理设备发现事件"""
-        try:
-            device_type = device_info.get("device_type", "UNKNOWN")
-            vendor = device_info.get("vendor", "UNKNOWN")
-
-            self.status_label.setText(f"发现新设备: {device_id} ({device_type})")
-            self.logger.info(f"新设备发现: {device_id} - {vendor} {device_type}")
-
-            # 可以在这里更新设备管理UI
-
-        except Exception as e:
-            self.logger.error(f"处理设备发现失败: {e}")
-
-    # 🔥 8. DataBus系统信号处理
-
-    @Slot(str, str)
-    def on_databus_message_published(self, channel: str, source: str):
-        """DataBus消息发布通知"""
-        if channel != "telemetry_data":
-            self.logger.debug(f"DataBus发布: {channel} <- {source}")
-
-    @Slot(str, int)
-    def on_databus_message_delivered(self, channel: str, count: int):
-        """DataBus消息投递通知"""
-        # 可用于性能监控
-        if count > 0 and channel != "telemetry_data":
-            self.logger.debug(f"DataBus投递: {channel} -> {count}个订阅者")
-
-    @Slot(list)
-    def on_device_list_updated(self, device_list: list):
-        """处理设备列表更新"""
-        try:
-            device_count = len(device_list)
-            self.update_device_count(device_count)
-
-            if device_count > 0:
-                self.status_label.setText(f"活跃设备: {device_count}个")
-                self.visualization_status.setText("● 数据流活跃")
-                self.visualization_status.setStyleSheet(
-                    "color: #27AE60; font-weight: bold;"
-                )
-            else:
-                self.status_label.setText("暂无活跃设备")
-                self.visualization_status.setText("● 等待设备数据")
-                self.visualization_status.setStyleSheet(
-                    "color: #F39C12; font-weight: bold;"
-                )
-
-            # 更新StackControl的设备信息
-            if self.stack_control_widget:
-                self.stack_control_widget.update_device_list(device_list)
-
-            self.logger.debug(f"设备列表更新: {device_count}个设备")
-
-        except Exception as e:
-            self.logger.error(f"处理设备列表更新失败: {e}")
-
-    @Slot(str, dict)
-    def on_device_statistics_updated(self, device_id: str, stats: dict):
-        """处理设备统计信息更新"""
-        try:
-            # 更新数据计数 - 使用所有设备的总记录数
-            total_records = stats.get("total_records", 0)
-            self.update_data_count(total_records)
-
-            # 更新状态显示 - 显示当前设备的关键信息
-            current_device = self.visualization_controller.current_device
-            if device_id == current_device:
-                avg_temp = stats.get("avg_temperature", 0)
-                update_freq = stats.get("update_freq", 0)
-
-                self.status_label.setText(
-                    f"设备: {device_id} | 平均温度: {avg_temp:.1f}°C | 频率: {update_freq:.1f}Hz"
-                )
-
-            self.logger.debug(f"设备统计更新: {device_id} | 记录数: {total_records}")
-
-        except Exception as e:
-            self.logger.error(f"处理设备统计更新失败: {e}")
-
     @Slot(bool, str)
     def on_visualization_connection_changed(self, connected: bool, message: str):
         """处理可视化连接状态变化"""
@@ -576,18 +386,9 @@ class MainWindow(QMainWindow):
                     "color: #27AE60; font-weight: bold;"
                 )
 
-                self.visualization_status.setText("● 数据流活跃")
-                self.visualization_status.setStyleSheet(
-                    "color: #27AE60; font-weight: bold;"
-                )
             else:
                 self.connection_indicator.setText("● 无数据")
                 self.connection_indicator.setStyleSheet(
-                    "color: #F39C12; font-weight: bold;"
-                )
-
-                self.visualization_status.setText("● 等待数据")
-                self.visualization_status.setStyleSheet(
                     "color: #F39C12; font-weight: bold;"
                 )
 
@@ -644,7 +445,7 @@ class MainWindow(QMainWindow):
             self.update_startup_status(db_success, persistence_success, mqtt_success)
 
             # 🔥 5. 刷新MenuBar状态显示
-            QTimer.singleShot(1000, self.refresh_all_status)
+            # QTimer.singleShot(1000, self.refresh_all_status)
 
         except Exception as e:
             self.logger.error(f"自动启动服务失败: {e}")
@@ -795,72 +596,34 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"更新启动状态失败: {e}")
 
-    # 🔥 新增：手动服务控制方法
-    @Slot(bool)
-    def on_mqtt_toggle_requested(self, start: bool):
-        """处理MQTT开关请求"""
+    def closeEvent(self, event):
+        """关闭事件处理"""
         try:
-            if start:
-                if self.auto_start_mqtt_service():
-                    self.status_label.setText("MQTT服务已启动")
-                else:
-                    self.status_label.setText("MQTT服务启动失败")
-            else:
-                mqtt_manager.disconnect()
-                self.status_label.setText("MQTT服务已停止")
-                self.logger.info("MQTT服务已手动停止")
-        except Exception as e:
-            self.logger.error(f"MQTT开关操作失败: {e}")
+            self.logger.info("关闭主窗口...")
 
-    @Slot(bool)
-    def on_persistence_toggle_requested(self, start: bool):
-        """处理持久化服务开关请求"""
-        try:
-            if start:
-                if self.auto_start_persistence_service():
-                    self.status_label.setText("持久化服务已启动")
-                else:
-                    self.status_label.setText("持久化服务启动失败")
-            else:
-                if database_persistence_service.stop():
-                    self.status_label.setText("持久化服务已停止")
-                    self.logger.info("持久化服务已手动停止")
-                else:
-                    self.status_label.setText("持久化服务停止失败")
-        except Exception as e:
-            self.logger.error(f"持久化服务开关操作失败: {e}")
+            # 关闭子窗口
+            if hasattr(self, "history_data_window") and self.history_data_window:
+                self.history_data_window.close()
+            if hasattr(self, "network_debug_window") and self.network_debug_window:
+                self.network_debug_window.close()
 
-    @Slot()
-    def refresh_all_status(self):
-        """刷新所有状态显示"""
-        try:
-            # 获取各服务状态
-            mqtt_connected = mqtt_manager.is_connected()
+            # 停止可视化组件
+            if self.visualization_widget and hasattr(
+                self.visualization_widget, "cleanup"
+            ):
+                self.visualization_widget.cleanup()
 
-            persistence_stats = database_persistence_service.get_service_stats()
-            persistence_running = persistence_stats.get("running", False)
-
-            db_connected = db_manager.is_connected()
-
-            # 🔥 更新MenuBar状态显示（如果存在）
-            if hasattr(self.menu_bar, "update_all_status"):
-                self.menu_bar.update_all_status(
-                    mqtt_connected, persistence_running, db_connected
-                )
-
-            # 更新主窗口状态显示
-            if mqtt_connected and persistence_running and db_connected:
-                self.status_label.setText("✅ 所有服务正常运行")
-            else:
-                status_parts = []
-                if not db_connected:
-                    status_parts.append("数据库离线")
-                if not persistence_running:
-                    status_parts.append("持久化停止")
-                if not mqtt_connected:
-                    status_parts.append("MQTT断开")
-
-                self.status_label.setText(f"⚠️ {', '.join(status_parts)}")
+            super().closeEvent(event)
+            self.logger.info("主窗口已关闭")
 
         except Exception as e:
-            self.logger.error(f"刷新状态失败: {e}")
+            self.logger.error(f"关闭窗口时发生错误: {e}")
+            super().closeEvent(event)
+
+    def showEvent(self, event):
+        """窗口显示事件"""
+        super().showEvent(event)
+        self.logger.info("主窗口已显示")
+        self.status_label.setText("系统就绪 - 界面加载完成")
+        if not self.startup_timer.isActive():
+            self.startup_timer.start(2000)

@@ -124,8 +124,6 @@ class DeviceChartsWidget(QWidget):
             ("pressure", "压力 (Torr)", "#3b82f6", 0, 1),
             ("rf_power", "RF功率 (W)", "#f59e0b", 1, 0),
             ("endpoint", "端点信号", "#10b981", 1, 1),
-            ("humidity", "湿度 (%RH)", "#8b5cf6", 2, 0),
-            ("vibration", "振动 (mm/s)", "#f97316", 2, 1),
         ]
 
         # 🔥 创建图表
@@ -146,9 +144,9 @@ class DeviceChartsWidget(QWidget):
 
         # 🔥 图表组件
         plot_widget = pg.PlotWidget()
-        plot_widget.setBackground("#111827")
-        plot_widget.setLabel("left", ylabel, color="#f9fafb", size="9pt")
-        plot_widget.setLabel("bottom", "时间 (秒)", color="#f9fafb", size="9pt")
+        plot_widget.setBackground("#f9fafb")
+        plot_widget.setLabel("left", ylabel, color="#080808", size="9pt")
+        plot_widget.setLabel("bottom", "时间 (秒)", color="#080808", size="9pt")
         plot_widget.showGrid(x=True, y=True, alpha=0.3)
         plot_widget.setMouseEnabled(x=True, y=True)
 
