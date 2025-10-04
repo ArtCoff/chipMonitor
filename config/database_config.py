@@ -95,5 +95,5 @@ class DatabaseStats:
     last_check_time: Optional[float] = None
 
 
-# 🔥 全局配置实例
+# 全局配置实例
 database_config = DatabaseConfig.load_from_file()

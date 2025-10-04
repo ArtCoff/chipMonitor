@@ -5,8 +5,8 @@ import logging
 import msgpack
 from typing import Dict, List, Optional, Callable, Set, Any
 from PySide6.QtCore import QObject, Signal, QTimer, Qt
-from .thread_pool import thread_pool, TaskType, TaskPriority
-from .data_bus import data_bus, DataChannel, DataMessage
+from .thread_pool import get_thread_pool, TaskType, TaskPriority
+from .data_bus import get_data_bus, DataChannel, DataMessage
 
 
 class MqttManager(QObject):
@@ -17,8 +17,10 @@ class MqttManager(QObject):
     connection_status = Signal(str)  # 连接状态文本
     message_received = Signal(str, bytes, int)  # (主题, 载荷, QoS)
 
-    def __init__(self):
+    def __init__(self, parent: Optional[QObject] = None):
         super().__init__()
+        self.thread_pool = get_thread_pool()
+        self.data_bus = get_data_bus()
         self.client: Optional[mqtt.Client] = None
         self.connected = False
         self.connection_config = {
@@ -56,10 +58,10 @@ class MqttManager(QObject):
         self.stats_timer.timeout.connect(self._emit_statistics)
         self.stats_timer.start(2000)  # 每2秒发送统计信息
         logging.info("MQTT管理器已初始化")
-        thread_pool.task_completed.connect(
+        self.thread_pool.task_completed.connect(
             self._on_device_data_processed, Qt.QueuedConnection
         )
-        thread_pool.task_failed.connect(
+        self.thread_pool.task_failed.connect(
             self._on_device_data_processing_failed, Qt.QueuedConnection
         )
 
@@ -263,7 +265,7 @@ class MqttManager(QObject):
                 )
                 # logging.info(f"🔄 提交解析任务: {task_id} | {topic}")
 
-                success = thread_pool.submit(
+                success = self.thread_pool.submit(
                     TaskType.DATA_PROCESSING,  # 或 ANALYTICS
                     self._parse_device_message,  # 子线程执行的函数
                     topic,
@@ -662,7 +664,7 @@ class MqttManager(QObject):
                     "timestamp": time.time(),
                     "topic": result.get("topic", ""),
                 }
-                data_bus.publish(
+                self.data_bus.publish(
                     channel=DataChannel.DEVICE_EVENTS,
                     source="mqtt_client",
                     data=device_info,
@@ -675,7 +677,7 @@ class MqttManager(QObject):
             if parse_success:
 
                 channel = DataChannel.TELEMETRY_DATA
-                success = data_bus.publish(
+                success = self.data_bus.publish(
                     channel=channel,
                     source="mqtt_client",
                     data=result,
@@ -693,7 +695,7 @@ class MqttManager(QObject):
                     "error": result.get("parse_error", "未知错误"),
                     "task_id": task_id,
                 }
-                data_bus.publish(
+                self.data_bus.publish(
                     channel=DataChannel.ERRORS,
                     source="mqtt_client",
                     data=error_data,
@@ -703,7 +705,7 @@ class MqttManager(QObject):
         except Exception as e:
             logging.error(f"处理任务回调失败: {task_id} -> {e}")
             try:
-                data_bus.publish(
+                self.data_bus.publish(
                     channel=DataChannel.ERRORS,
                     source="mqtt_client",
                     data={
@@ -779,7 +781,7 @@ class MqttManager(QObject):
             }
 
             # 发布到DataBus
-            data_bus.publish(
+            self.data_bus.publish(
                 channel=DataChannel.DEVICE_EVENTS,
                 source="mqtt_client",
                 data=gateway_result,
@@ -805,7 +807,7 @@ class MqttManager(QObject):
             logging.info(f"系统消息: {topic} | {len(payload)}字节")
 
             # 发布系统事件
-            data_bus.publish(
+            self.data_bus.publish(
                 channel=DataChannel.DEVICE_EVENTS,
                 source="mqtt_client",
                 data={
@@ -879,7 +881,7 @@ class MqttManager(QObject):
         logging.error(f"[失败] 设备数据处理失败 {task_id}: {error}")
         self.connection_status.emit(f"数据处理失败: {error[:50]}...")
         try:
-            data_bus.publish(
+            self.data_bus.publish(
                 channel=DataChannel.ERRORS,
                 source="mqtt_client",
                 data={
@@ -900,5 +902,20 @@ class MqttManager(QObject):
         return self.connected
 
 
+_mqtt_manager = None
+
+
+def get_mqtt_manager() -> MqttManager:
+    global _mqtt_manager
+    if _mqtt_manager is None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is None:
+            raise RuntimeError("QApplication not created!")
+        _mqtt_manager = MqttManager(parent=app)
+    return _mqtt_manager
+
+
 # 全局MQTT管理器
-mqtt_manager = MqttManager()
+# mqtt_manager = MqttManager()

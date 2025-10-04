@@ -20,8 +20,8 @@ from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QFont, QIcon
 
 from config.mqtt_config import get_current_config, save_config, MqttConfig
-from core.mqtt_client import mqtt_manager
-from core.device_manager import device_manager
+from core.mqtt_client import get_mqtt_manager
+from core.device_manager import get_device_manager
 from utils.path import ICON_DIR
 
 
@@ -31,6 +31,8 @@ class NetworkControlPanel(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.mqtt_manager = get_mqtt_manager()
+        self.device_manager = get_device_manager()
 
         # 窗口配置
         self.setWindowTitle("网络调试")
@@ -230,10 +232,10 @@ class NetworkControlPanel(QDialog):
         """设置MQTT连接监听"""
         try:
             # MQTT管理器信号
-            mqtt_manager.connection_changed.connect(
+            self.mqtt_manager.connection_changed.connect(
                 self.on_connection_changed, Qt.QueuedConnection
             )
-            mqtt_manager.statistics_updated.connect(
+            self.mqtt_manager.statistics_updated.connect(
                 self.on_statistics_updated, Qt.QueuedConnection
             )
             # mqtt_manager.device_discovered.connect(
@@ -339,13 +341,13 @@ class NetworkControlPanel(QDialog):
     def toggle_connection(self):
         """切换连接状态"""
         try:
-            if not mqtt_manager.connected:
+            if not self.mqtt_manager.connected:
                 # 连接
                 config = self.get_config()
                 self.add_log(f"正在连接: {config.host}:{config.port}")
                 self.connect_btn.setEnabled(False)
 
-                success = mqtt_manager.connect(
+                success = self.mqtt_manager.connect(
                     host=config.host,
                     port=config.port,
                     username=config.username,
@@ -357,7 +359,7 @@ class NetworkControlPanel(QDialog):
                     self.connect_btn.setEnabled(True)
             else:
                 # 断开
-                mqtt_manager.disconnect()
+                self.mqtt_manager.disconnect()
                 self.add_log("断开连接")
 
         except Exception as e:
@@ -431,7 +433,7 @@ class NetworkControlPanel(QDialog):
             config = self.get_config()
             subscription_success = []
             for topic in config.subscribe_topics:
-                success = mqtt_manager.subscribe_topic(topic)
+                success = self.mqtt_manager.subscribe_topic(topic)
                 subscription_success.append((topic, success))
                 if success:
                     self.add_log(f"✅ 订阅成功: {topic}")

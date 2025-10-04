@@ -11,7 +11,7 @@ from psycopg2.extras import RealDictCursor, execute_values
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from config.database_config import database_config, DatabaseConfig, DatabaseStats
-from .thread_pool import thread_pool, TaskType, TaskPriority
+from .thread_pool import TaskType, TaskPriority, get_thread_pool
 
 
 class DatabaseManager(QObject):
@@ -23,9 +23,10 @@ class DatabaseManager(QObject):
     batch_completed = Signal(str, dict)
     batch_failed = Signal(str, str)
 
-    def __init__(self):
+    def __init__(self, parent: Optional[QObject] = None):
         super().__init__()
         self.logger = logging.getLogger("DatabaseManager")
+        self.thread_pool = get_thread_pool()
 
         # 连接池和状态
         self._connection_pool: Optional[ThreadedConnectionPool] = None
@@ -903,7 +904,8 @@ class DatabaseManager(QObject):
             return
 
         try:
-            task_id = thread_pool.submit(
+
+            task_id = self.thread_pool.submit(
                 task_type=TaskType.DATA_PROCESSING,
                 func=self._get_stats_worker,
                 task_id=f"stats_{int(time.time())}",
@@ -1064,5 +1066,20 @@ class DatabaseManager(QObject):
             return None
 
 
+_db_manager = None
+
+
+def get_db_manager() -> DatabaseManager:
+    global _db_manager
+    if _db_manager is None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is None:
+            raise RuntimeError("QApplication not created!")
+        _db_manager = DatabaseManager(parent=app)
+    return _db_manager
+
+
 # 全局实例
-db_manager = DatabaseManager()
+# db_manager = DatabaseManager()

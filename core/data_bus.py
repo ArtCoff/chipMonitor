@@ -40,7 +40,7 @@ class DataBus(QObject):
     message_published = Signal(str, str)  # (channel, source)
     message_delivered = Signal(str, int)  # (channel, subscriber_count)
 
-    def __init__(self):
+    def __init__(self, parent: Optional[QObject] = None):
         super().__init__()
         self.logger = logging.getLogger("DataBus")
 
@@ -220,5 +220,20 @@ class DataBus(QObject):
         return cleaned_count
 
 
+_data_bus = None
+
+
+def get_data_bus() -> DataBus:
+    global _data_bus
+    if _data_bus is None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is None:
+            raise RuntimeError("QApplication not created!")
+        _data_bus = DataBus(parent=app)
+    return _data_bus
+
+
 # 全局数据总线实例
-data_bus = DataBus()
+# data_bus = DataBus()

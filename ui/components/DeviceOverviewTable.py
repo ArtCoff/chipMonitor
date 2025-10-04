@@ -262,38 +262,39 @@ class DeviceOverviewTable(QWidget):
     def populate_table_row(
         self, row: int, device_id: str, device_info: dict, is_online: bool
     ):
-        """填充表格行数据"""
         try:
             # 设备ID
-            device_item = QTableWidgetItem(device_id)
-            device_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
-            self.device_overview_table.setItem(row, 0, device_item)
-
-            # 设备类型
-            device_type = device_info.get("device_type", "UNKNOWN")
-            type_item = QTableWidgetItem(device_type)
-            self.device_overview_table.setItem(row, 1, type_item)
-
-            vendor = device_info.get("vendor", "UNKNOWN")
-            vendor_item = QTableWidgetItem(vendor)
-            self.device_overview_table.setItem(row, 2, vendor_item)
-
-            # 连接状态
+            self.device_overview_table.setItem(row, 0, QTableWidgetItem(device_id))
+            # 类型
+            self.device_overview_table.setItem(
+                row, 1, QTableWidgetItem(device_info.get("device_type", "UNKNOWN"))
+            )
+            # 厂商
+            self.device_overview_table.setItem(
+                row, 2, QTableWidgetItem(device_info.get("vendor", "UNKNOWN"))
+            )
+            # 状态
             status_text = "● 在线" if is_online else "● 离线"
             status_item = QTableWidgetItem(status_text)
             status_color = QColor("#10b981") if is_online else QColor("#ef4444")
             status_item.setForeground(status_color)
-            status_item.setFont(QFont("Segoe UI", 9, QFont.Bold))
             self.device_overview_table.setItem(row, 3, status_item)
-
-            # 🔥 传感器数据 - 显示最新值
-            self.populate_sensor_data(row, device_info)
-
+            # 传感器数量
+            self.device_overview_table.setItem(
+                row, 4, QTableWidgetItem(str(device_info.get("sensor_count", "--")))
+            )
+            # 数据频率
+            self.device_overview_table.setItem(
+                row, 5, QTableWidgetItem(device_info.get("data_rate", "--"))
+            )
+            # 最后在线时间
+            self.device_overview_table.setItem(
+                row, 6, QTableWidgetItem(device_info.get("last_online", "--"))
+            )
             # 运行时长
-            runtime_text = self.format_runtime(device_info)
-            runtime_item = QTableWidgetItem(runtime_text)
-            self.device_overview_table.setItem(row, 5, runtime_item)
-
+            self.device_overview_table.setItem(
+                row, 7, QTableWidgetItem(device_info.get("runtime", "--"))
+            )
         except Exception as e:
             self.logger.error(f"行数据填充失败: {e}")
 
@@ -369,24 +370,6 @@ class DeviceOverviewTable(QWidget):
 
         except Exception as e:
             self.logger.error(f"设备双击处理失败: {e}")
-
-    def update_devices_data(self, devices_data: list):
-        """兼容方法 - 将列表格式转换为字典格式"""
-        try:
-            if isinstance(devices_data, list):
-                # 将列表格式转换为字典格式
-                device_dict = {}
-                for device in devices_data:
-                    device_id = device.get("device_id")
-                    if device_id:
-                        device_dict[device_id] = device
-                self.update_table_data(device_dict)
-            else:
-                # 如果已经是字典格式，直接调用
-                self.update_table_data(devices_data)
-
-        except Exception as e:
-            self.logger.error(f"设备数据更新失败: {e}")
 
     def set_selected_device(self, device_id: str):
         """设置选中的设备"""

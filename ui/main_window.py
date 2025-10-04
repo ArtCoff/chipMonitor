@@ -17,11 +17,11 @@ from .components.StackControl import StackControlWidget
 from .components.NetworkControlPanel import NetworkControlPanel
 from .components.DatabaseControlPanel import DatabaseControlPanel
 from .components.DataVisualizationWidget import DataVisualizationWidget
-from core.data_bus import data_bus
-from core.mqtt_client import mqtt_manager
-from core.database_manager import db_manager
-from core.device_manager import device_manager
-from services.database_persistence import database_persistence_service
+
+from core.data_bus import get_data_bus
+from core.mqtt_client import get_mqtt_manager
+from core.database_manager import get_db_manager
+from core.device_manager import get_device_manager
 
 
 class MainWindow(QMainWindow):
@@ -49,16 +49,17 @@ class MainWindow(QMainWindow):
         self.persistence_status_timer.timeout.connect(self.update_persistence_status)
         self.persistence_status_timer.start(10000)  # 10秒检查一次持久化服务状态
 
-        device_manager.load_devices_from_db()
+        # device_manager.load_devices_from_db()
         # 当前可视化模式
         self.current_mode = "table"
         # 添加启动服务定时器
         self.startup_timer = QTimer()
         self.startup_timer.setSingleShot(True)
         self.startup_timer.timeout.connect(self.auto_start_services)
-
-        # 初始化UI和样式
-
+        self.data_bus = get_data_bus()
+        self.mqtt_manager = get_mqtt_manager()
+        self.db_manager = get_db_manager()
+        self.device_manager = get_device_manager()
         self.setup_ui()
         self.load_qss_style()
         self.setup_signal_connections()
@@ -182,25 +183,29 @@ class MainWindow(QMainWindow):
             self.stack_control_widget.mode_changed.connect(self.on_mode_changed)
 
         # 可视化组件信号连接
-        mqtt_manager.connection_changed.connect(
+        self.mqtt_manager.connection_changed.connect(
             self.on_mqtt_connection_changed, Qt.QueuedConnection
         )
-        mqtt_manager.connection_status.connect(
+        self.mqtt_manager.connection_status.connect(
             self.on_mqtt_connection_status, Qt.QueuedConnection
         )
 
         # 统计信息信号
-        mqtt_manager.statistics_updated.connect(
+        self.mqtt_manager.statistics_updated.connect(
             self.on_mqtt_statistics_updated, Qt.QueuedConnection
         )
         # 添加数据库持久化服务信号连接
-        database_persistence_service.service_started.connect(
+        from services.database_persistence import database_persistence_service
+
+        self.database_persistence_service = database_persistence_service
+
+        self.database_persistence_service.service_started.connect(
             self.on_persistence_service_started, Qt.QueuedConnection
         )
-        database_persistence_service.service_stopped.connect(
+        self.database_persistence_service.service_stopped.connect(
             self.on_persistence_service_stopped, Qt.QueuedConnection
         )
-        database_persistence_service.stats_updated.connect(
+        self.database_persistence_service.stats_updated.connect(
             self.on_persistence_stats_updated, Qt.QueuedConnection
         )
 
@@ -213,7 +218,7 @@ class MainWindow(QMainWindow):
             connection_duration = int(stats.get("connection_duration", 0))
 
             # 获取DataBus统计
-            databus_stats = data_bus.get_stats()
+            databus_stats = self.data_bus.get_stats()
             published = databus_stats.get("published", 0)
             delivered = databus_stats.get("delivered", 0)
 
@@ -401,7 +406,7 @@ class MainWindow(QMainWindow):
     def update_persistence_status(self):
         """定期检查持久化服务状态"""
         try:
-            service_stats = database_persistence_service.get_service_stats()
+            service_stats = self.database_persistence_service.get_service_stats()
 
             if service_stats.get("running"):
                 # 服务正常运行
@@ -456,12 +461,12 @@ class MainWindow(QMainWindow):
         try:
             self.status_label.setText("正在连接数据库...")
 
-            if db_manager.is_connected():
+            if self.db_manager.is_connected():
                 self.logger.info("数据库已连接，跳过启动")
                 return True
 
             # 尝试连接数据库
-            success = db_manager.connect()
+            success = self.db_manager.connect()
 
             if success:
                 self.logger.info("✅ 数据库自动连接成功")
@@ -483,13 +488,13 @@ class MainWindow(QMainWindow):
             self.status_label.setText("正在启动持久化服务...")
 
             # 检查服务状态
-            stats = database_persistence_service.get_service_stats()
+            stats = self.database_persistence_service.get_service_stats()
             if stats.get("running"):
                 self.logger.info("持久化服务已运行，跳过启动")
                 return True
 
             # 启动持久化服务
-            success = database_persistence_service.start()
+            success = self.database_persistence_service.start()
 
             if success:
                 self.logger.info("✅ 持久化服务自动启动成功")
@@ -510,7 +515,7 @@ class MainWindow(QMainWindow):
         try:
             self.status_label.setText("正在启动MQTT服务...")
 
-            if mqtt_manager.is_connected():
+            if self.mqtt_manager.is_connected():
                 self.logger.info("MQTT已连接，跳过启动")
                 return True
 
@@ -519,9 +524,9 @@ class MainWindow(QMainWindow):
 
             # 启动MQTT连接
             if mqtt_config:
-                success = mqtt_manager.connect(**mqtt_config)
+                success = self.mqtt_manager.connect(**mqtt_config)
             else:
-                success = mqtt_manager.connect()  # 使用默认配置
+                success = self.mqtt_manager.connect()  # 使用默认配置
 
             if success:
                 self.logger.info("✅ MQTT服务自动启动成功")
@@ -561,7 +566,7 @@ class MainWindow(QMainWindow):
             ]
 
             for topic in default_topics:
-                success = mqtt_manager.subscribe_topic(topic, qos=1)
+                success = self.mqtt_manager.subscribe_topic(topic, qos=1)
                 if success:
                     self.logger.info(f"自动订阅成功: {topic}")
                 else:
@@ -625,5 +630,6 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         self.logger.info("主窗口已显示")
         self.status_label.setText("系统就绪 - 界面加载完成")
+        self.device_manager.load_devices_from_db()
         if not self.startup_timer.isActive():
             self.startup_timer.start(2000)

@@ -5,9 +5,9 @@ from typing import Dict, List, Any
 from collections import deque, defaultdict
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
-from core.data_bus import data_bus, DataChannel, DataMessage
-from core.database_manager import db_manager
-from core.thread_pool import thread_pool, TaskType, TaskPriority
+from core.data_bus import get_data_bus, DataChannel, DataMessage
+from core.database_manager import get_db_manager
+from core.thread_pool import get_thread_pool, TaskType, TaskPriority
 
 
 class DatabasePersistenceService(QObject):
@@ -23,7 +23,9 @@ class DatabasePersistenceService(QObject):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger("DatabasePersistenceService")
-
+        self.data_bus = get_data_bus()
+        self.db_manager = get_db_manager()
+        self.thread_pool = get_thread_pool()
         # 🔥 服务状态
         self._running = False
         self._subscribed = False
@@ -83,7 +85,7 @@ class DatabasePersistenceService(QObject):
                 return True
 
             # 检查数据库连接
-            if not db_manager.is_connected():
+            if not self.db_manager.is_connected():
                 self.logger.error("数据库未连接，无法启动持久化服务")
                 return False
 
@@ -141,7 +143,7 @@ class DatabasePersistenceService(QObject):
         """订阅所有数据频道"""
         try:
             for channel in DataChannel:
-                success = data_bus.subscribe(channel, self._on_message_received)
+                success = self.data_bus.subscribe(channel, self._on_message_received)
                 if success:
                     self.logger.debug(f"已订阅频道: {channel.value}")
                 else:
@@ -156,7 +158,7 @@ class DatabasePersistenceService(QObject):
         """取消订阅所有频道"""
         try:
             for channel in DataChannel:
-                data_bus.unsubscribe(channel, self._on_message_received)
+                self.data_bus.unsubscribe(channel, self._on_message_received)
                 self.logger.debug(f"已取消订阅: {channel.value}")
 
             self._subscribed = False
@@ -212,7 +214,7 @@ class DatabasePersistenceService(QObject):
                 "priority": TaskPriority.NORMAL,
                 "timeout": 30.0,
             }
-            task_id = thread_pool.submit(
+            task_id = self.thread_pool.submit(
                 TaskType.BATCH_PROCESSING,
                 self._batch_worker,
                 channel,
@@ -247,15 +249,15 @@ class DatabasePersistenceService(QObject):
                 return {"success": True, "processed": 0}
 
             # 🔥 根据频道类型调用数据库管理器的批量插入
-            if db_manager.is_connected():
+            if self.db_manager.is_connected():
                 if channel == DataChannel.TELEMETRY_DATA:
-                    result = db_manager.batch_insert_telemetry(messages)
+                    result = self.db_manager.batch_insert_telemetry(messages)
                 elif channel == DataChannel.ALERTS:
-                    result = db_manager.batch_insert_alerts(messages)
+                    result = self.db_manager.batch_insert_alerts(messages)
                 elif channel == DataChannel.DEVICE_EVENTS:
-                    result = db_manager.batch_insert_events(messages)
+                    result = self.db_manager.batch_insert_events(messages)
                 elif channel == DataChannel.ERRORS:
-                    result = db_manager.batch_insert_errors(messages)
+                    result = self.db_manager.batch_insert_errors(messages)
 
                 if result["success"]:
                     self.stats["messages_persisted"] += result.get("processed", 0)
@@ -322,15 +324,15 @@ class DatabasePersistenceService(QObject):
                     messages = list(self.batch_queues[channel_key])
                     self.batch_queues[channel_key].clear()
 
-                if messages and db_manager.is_connected():
+                if messages and self.db_manager.is_connected():
                     if channel == DataChannel.TELEMETRY_DATA:
-                        db_manager.batch_insert_telemetry(messages)
+                        self.db_manager.batch_insert_telemetry(messages)
                     elif channel == DataChannel.ALERTS:
-                        db_manager.batch_insert_alerts(messages)
+                        self.db_manager.batch_insert_alerts(messages)
                     elif channel == DataChannel.DEVICE_EVENTS:
-                        db_manager.batch_insert_events(messages)
+                        self.db_manager.batch_insert_events(messages)
                     elif channel == DataChannel.ERRORS:
-                        db_manager.batch_insert_errors(messages)
+                        self.db_manager.batch_insert_errors(messages)
 
                     self.logger.info(
                         f"同步刷新 {channel.value}: {len(messages)} 条记录"
@@ -369,7 +371,7 @@ class DatabasePersistenceService(QObject):
                 "running": self._running,
                 "subscribed": self._subscribed,
                 "queue_sizes": queue_stats,
-                "database_connected": db_manager.is_connected(),
+                "database_connected": self.db_manager.is_connected(),
                 "batch_strategies": {
                     ch.value: strategy for ch, strategy in self.batch_strategies.items()
                 },

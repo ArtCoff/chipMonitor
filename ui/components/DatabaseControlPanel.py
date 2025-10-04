@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, Slot, QTimer
 from PySide6.QtGui import QFont, QPixmap, QIcon, QTextCursor
 from config.database_config import database_config, DatabaseConfig, DatabaseStats
-from core.database_manager import db_manager
+from core.database_manager import get_db_manager
 from utils.path import ICON_DIR
 
 
@@ -32,6 +32,7 @@ class DatabaseControlPanel(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger("DatabaseControlPanel")
+        self.db_manager = get_db_manager()
 
         # 窗口设置
         self.setWindowTitle("数据库管理")
@@ -287,8 +288,8 @@ class DatabaseControlPanel(QDialog):
         self.close_button.clicked.connect(self.close)
 
         # 数据库管理器信号
-        db_manager.connection_changed.connect(self.on_connection_changed)
-        db_manager.stats_updated.connect(self.on_stats_updated)
+        self.db_manager.connection_changed.connect(self.on_connection_changed)
+        self.db_manager.stats_updated.connect(self.on_stats_updated)
 
     def load_current_config(self):
         """加载当前配置 - 修复版本"""
@@ -348,7 +349,7 @@ class DatabaseControlPanel(QDialog):
             self.test_button.setText("测试中...")
 
             config = self.get_current_config()
-            success, message = db_manager.test_connection(config)
+            success, message = self.db_manager.test_connection(config)
 
             if success:
                 self.log_message(f"✅ 连接测试成功: {message}")
@@ -370,7 +371,7 @@ class DatabaseControlPanel(QDialog):
         """连接数据库"""
         try:
             config = self.get_current_config()
-            success = db_manager.connect(config)
+            success = self.db_manager.connect(config)
 
             if success:
                 self.log_message("✅ 数据库连接成功")
@@ -384,7 +385,7 @@ class DatabaseControlPanel(QDialog):
     def disconnect_database(self):
         """断开数据库连接"""
         try:
-            db_manager.disconnect()
+            self.db_manager.disconnect()
             self.log_message("数据库连接已断开")
         except Exception as e:
             self.log_message(f"断开连接异常: {e}", "error")
@@ -393,7 +394,7 @@ class DatabaseControlPanel(QDialog):
     def update_stats(self):
         """更新统计信息 - 修复版本"""
         try:
-            stats = db_manager.get_stats()
+            stats = self.db_manager.get_stats()
             self.current_stats = stats
 
             # 更新显示

@@ -232,7 +232,7 @@ class DeviceControlPanel(QWidget):
         """更新设备状态信息"""
         try:
             if device_id != self.current_device:
-                return
+                self.current_device = device_id
 
             # 更新连接状态
             self.update_connection_status(device_data)
@@ -274,12 +274,14 @@ class DeviceControlPanel(QWidget):
     # === 内部更新方法 ===
 
     def update_connection_status(self, device_data: dict):
-        """更新连接状态显示"""
+        """更新连接状态显示（优先使用 online 字段；否则按 last_update 判定）"""
         try:
-            is_online = (
-                device_data.get("last_update")
-                and (time.time() - device_data["last_update"]) < 10
-            )
+            if "online" in device_data:
+                is_online = bool(device_data.get("online"))
+            else:
+                last_update = device_data.get("last_update") or 0
+                threshold = device_data.get("offline_threshold", 30)
+                is_online = last_update and (time.time() - last_update) < threshold
 
             if is_online:
                 self.status_indicator.setObjectName("statusIndicatorOnline")
@@ -296,7 +298,7 @@ class DeviceControlPanel(QWidget):
             self.status_text.style().unpolish(self.status_text)
             self.status_text.style().polish(self.status_text)
 
-            # 更新最后更新时间
+            # 最后更新时间
             if device_data.get("last_update"):
                 update_time = datetime.fromtimestamp(
                     device_data["last_update"]
@@ -304,6 +306,10 @@ class DeviceControlPanel(QWidget):
                 self.last_update_label.setText(f"最后更新: {update_time}")
             else:
                 self.last_update_label.setText("最后更新: --")
+
+            # 数据率
+            rate = device_data.get("data_rate") or "--"
+            self.data_rate_label.setText(f"数据率: {rate}")
 
         except Exception as e:
             self.logger.error(f"连接状态更新失败: {e}")
@@ -315,60 +321,36 @@ class DeviceControlPanel(QWidget):
                 "device_type": device_data.get("device_type", "--"),
                 "recipe": device_data.get("recipe", "--"),
                 "step": device_data.get("step", "--"),
-                "lot_id": device_data.get("lot_id", "--"),
+                "lot_number": device_data.get("lot_number", "--"),
                 "wafer_id": device_data.get("wafer_id", "--"),
             }
-
             for key, value in info_mapping.items():
                 if key in self.device_info_labels:
                     self.device_info_labels[key].setText(str(value))
-
         except Exception as e:
             self.logger.error(f"设备信息更新失败: {e}")
 
     def update_statistics(self, device_data: dict):
-        """更新统计信息显示"""
+        """更新统计信息显示（直接用汇总值，不再依赖原始数组）"""
         try:
-            # 数据点数
-            data_count = len(device_data.get("timestamps", []))
-            self.stats_labels["data_points"].setText(str(data_count))
+            self.stats_labels["data_points"].setText(
+                str(device_data.get("data_points", 0))
+            )
 
-            # 平均温度
-            if device_data.get("temperature") and len(device_data["temperature"]) > 0:
-                temps = list(device_data["temperature"])
-                avg_temp = sum(temps) / len(temps)
-                self.stats_labels["avg_temp"].setText(f"{avg_temp:.1f}°C")
-            else:
-                self.stats_labels["avg_temp"].setText("--")
+            avg_temp = device_data.get("avg_temp")
+            self.stats_labels["avg_temp"].setText(
+                f"{avg_temp:.1f}°C" if isinstance(avg_temp, (int, float)) else "--"
+            )
 
-            # 平均压力
-            if device_data.get("pressure") and len(device_data["pressure"]) > 0:
-                pressures = list(device_data["pressure"])
-                avg_pressure = sum(pressures) / len(pressures)
-                self.stats_labels["avg_pressure"].setText(f"{avg_pressure:.2f}Torr")
-            else:
-                self.stats_labels["avg_pressure"].setText("--")
+            avg_pressure = device_data.get("avg_pressure")
+            self.stats_labels["avg_pressure"].setText(
+                f"{avg_pressure:.2f}Torr"
+                if isinstance(avg_pressure, (int, float))
+                else "--"
+            )
 
-            # 运行时长
-            if device_data.get("timestamps") and len(device_data["timestamps"]) > 0:
-                first_time = device_data["timestamps"][0]
-                last_time = device_data.get("last_update", first_time)
-                runtime_seconds = last_time - first_time
-
-                if runtime_seconds > 3600:  # 超过1小时
-                    hours = int(runtime_seconds // 3600)
-                    minutes = int((runtime_seconds % 3600) // 60)
-                    runtime_text = f"{hours}h{minutes}m"
-                elif runtime_seconds > 60:  # 超过1分钟
-                    minutes = int(runtime_seconds // 60)
-                    seconds = int(runtime_seconds % 60)
-                    runtime_text = f"{minutes}m{seconds}s"
-                else:
-                    runtime_text = f"{runtime_seconds:.0f}s"
-
-                self.stats_labels["runtime"].setText(runtime_text)
-            else:
-                self.stats_labels["runtime"].setText("--")
+            runtime = device_data.get("runtime", "--")
+            self.stats_labels["runtime"].setText(runtime if runtime else "--")
 
         except Exception as e:
             self.logger.error(f"统计信息更新失败: {e}")

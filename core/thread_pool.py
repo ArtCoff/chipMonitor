@@ -62,7 +62,7 @@ class ThreadPool(QObject):
     task_retried = Signal(str, int)
     pool_stats_updated = Signal(dict)
 
-    def __init__(self, max_workers: int = None):
+    def __init__(self, max_workers: int = None, parent: Optional[QObject] = None):
         super().__init__()
 
         if max_workers is None:
@@ -375,4 +375,17 @@ class ThreadPool(QObject):
 
 
 # 全局线程池实例
-thread_pool = ThreadPool()
+# thread_pool = ThreadPool()
+_thread_pool = None
+
+
+def get_thread_pool() -> ThreadPool:
+    global _thread_pool
+    if _thread_pool is None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is None:
+            raise RuntimeError("QApplication not created!")
+        _thread_pool = ThreadPool(parent=app)
+    return _thread_pool

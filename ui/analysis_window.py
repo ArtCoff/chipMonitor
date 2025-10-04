@@ -2,28 +2,18 @@ import logging
 import json
 import csv
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
 
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
-    QFormLayout,
     QVBoxLayout,
     QHBoxLayout,
-    QGridLayout,
     QSplitter,
-    QGroupBox,
     QTableWidget,
     QTableWidgetItem,
-    QComboBox,
-    QDateTimeEdit,
-    QLineEdit,
     QPushButton,
     QLabel,
     QCheckBox,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QHeaderView,
     QAbstractItemView,
     QStatusBar,
     QFrame,
@@ -36,8 +26,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, Slot, QTimer, QThread
 from PySide6.QtGui import QIcon, QFont, QColor
 
-from core.database_manager import db_manager
-from core.thread_pool import thread_pool, TaskType, TaskPriority
+from core.database_manager import get_db_manager
+from core.thread_pool import get_thread_pool, TaskType, TaskPriority
 from utils.path import ICON_DIR
 from ui.components.AnalysisWindowControl import AnalysisWindowControl
 
@@ -104,6 +94,8 @@ class HistoryDataWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger("HistoryDataWindow")
+        self.db_manager = get_db_manager()
+        self.thread_pool = get_thread_pool()
 
         # 状态变量
         self.current_data = []
@@ -317,12 +309,12 @@ class HistoryDataWindow(QMainWindow):
         self.copy_selected_button.clicked.connect(self.on_copy_selected_clicked)
         self.select_all_rows_button.clicked.connect(self.on_select_all_rows_clicked)
         # 数据库连接状态
-        db_manager.connection_changed.connect(self.on_database_connection_changed)
+        self.db_manager.connection_changed.connect(self.on_database_connection_changed)
 
     def initialize_data(self):
         """初始化数据"""
         # 检查数据库连接
-        if db_manager.is_connected():
+        if self.db_manager.is_connected():
             self.on_database_connection_changed(True, "数据库已连接")
         else:
             self.on_database_connection_changed(False, "数据库未连接")
@@ -464,12 +456,12 @@ class HistoryDataWindow(QMainWindow):
     @Slot()
     def on_query_clicked(self, query_params: dict):
         """执行查询"""
-        if not db_manager.is_connected():
+        if not self.db_manager.is_connected():
             QMessageBox.warning(self, "错误", "数据库未连接！")
             return
             # 取消当前正在执行的查询任务
         if self.current_query_task_id:
-            thread_pool.cancel_task(self.current_query_task_id)
+            self.thread_pool.cancel_task(self.current_query_task_id)
 
         self.logger.info(f"开始执行查询: {self.current_table_type}")
 
@@ -477,7 +469,7 @@ class HistoryDataWindow(QMainWindow):
         self.control_panel.set_buttons_enabled(query_enabled=False)
         self.query_status_label.setText("查询中...")
 
-        self.current_query_task_id = thread_pool.submit(
+        self.current_query_task_id = self.thread_pool.submit(
             TaskType.DATA_PROCESSING,
             self.execute_query_task,
             query_params,
@@ -499,16 +491,16 @@ class HistoryDataWindow(QMainWindow):
 
             # 根据表类型执行不同查询
             if table_type == "telemetry_data":
-                results = db_manager.query_telemetry_data(
+                results = self.db_manager.query_telemetry_data(
                     start_time=start_time,
                     end_time=end_time,
                     limit=limit,
                     order_desc=order_desc,
                 )
             elif table_type == "alerts":
-                results = db_manager.query_alerts(limit=limit)
+                results = self.db_manager.query_alerts(limit=limit)
             elif table_type == "device_events":
-                results = db_manager.query_device_events(
+                results = self.db_manager.query_device_events(
                     start_time=start_time,
                     end_time=end_time,
                     limit=limit,
@@ -938,7 +930,7 @@ class HistoryDataWindow(QMainWindow):
     @Slot()
     def on_auto_refresh_timer(self):
         """自动刷新定时器"""
-        if db_manager.is_connected():
+        if self.db_manager.is_connected():
             self.on_query_clicked()
             self.logger.debug("自动刷新执行查询")
 
@@ -972,7 +964,7 @@ class HistoryDataWindow(QMainWindow):
 
     def update_device_list(self):
         """更新设备列表"""
-        if not db_manager.is_connected():
+        if not self.db_manager.is_connected():
             return
 
         try:
@@ -991,7 +983,7 @@ class HistoryDataWindow(QMainWindow):
         """关闭事件"""
         # 取消当前查询任务
         if self.current_query_task_id:
-            thread_pool.cancel_task(self.current_query_task_id)
+            self.thread_pool.cancel_task(self.current_query_task_id)
 
         # 停止定时器
         self.auto_refresh_timer.stop()

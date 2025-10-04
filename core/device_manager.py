@@ -2,8 +2,8 @@ import time
 import logging
 from typing import Dict, Any, Optional, List
 from PySide6.QtCore import QObject, Signal, Slot, QTimer
-from core.data_bus import data_bus, DataChannel, DataMessage
-from core.database_manager import db_manager
+from core.data_bus import get_data_bus, DataChannel, DataMessage
+from core.database_manager import get_db_manager
 
 
 class DeviceManager(QObject):
@@ -15,9 +15,11 @@ class DeviceManager(QObject):
     device_statistics_updated = Signal(str, dict)  # 单设备统计变更
     device_discovered = Signal(str, dict)  # 新设备发现
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
         self.logger = logging.getLogger("DeviceManager")
+        self.data_bus = get_data_bus()
+        self.db_manager = get_db_manager()
         self.device_data_dict: Dict[str, Dict[str, Any]] = {}
         self.device_stats: Dict[str, dict] = {}
 
@@ -30,8 +32,8 @@ class DeviceManager(QObject):
         self.load_devices_from_db()
 
         # 订阅 DataBus 遥测数据和设备事件
-        data_bus.subscribe(DataChannel.TELEMETRY_DATA, self._on_data_received)
-        data_bus.subscribe(DataChannel.DEVICE_EVENTS, self._on_data_received)
+        self.data_bus.subscribe(DataChannel.TELEMETRY_DATA, self._on_data_received)
+        self.data_bus.subscribe(DataChannel.DEVICE_EVENTS, self._on_data_received)
 
     @Slot()
     def _on_data_received(self, msg: DataMessage):
@@ -62,25 +64,15 @@ class DeviceManager(QObject):
     def refresh_all_device_status(self):
         """定时刷新所有设备的在线/离线状态，并持久化在线设备的 last_seen"""
         now = time.time()
+        changed: bool = False
         for device_id, info in self.device_data_dict.items():
-            # 超过30秒无数据 → 离线
-            if info["online"] and (now - info["last_update"]) >= 30:
+            last_update = info.get("last_update", 0)
+            if info.get("online", False) and (now - last_update) >= 30:
                 info["online"] = False
+                changed = True
                 self.logger.info(f"设备自动离线: {device_id}")
-
-        # 仅持久化当前在线的设备（更新 last_seen = now）
-        for device_id, info in self.device_data_dict.items():
-            if info["online"]:
-                db_info = {
-                    "device_id": device_id,
-                    "device_type": info["device_type"],
-                    "vendor": info["vendor"],
-                    "first_seen": info.get("first_seen"),
-                    "status": {"last_update": now},  # 用于 last_seen
-                }
-                self.persist_device_info(db_info)
-
-        self.device_list_updated.emit(list(self.device_data_dict.keys()))
+        if changed:
+            self.device_list_updated.emit(list(self.device_data_dict.keys()))
 
     def get_device_info(self, device_id: str) -> Optional[dict]:
         return self.device_data_dict.get(device_id)
@@ -95,7 +87,7 @@ class DeviceManager(QObject):
 
     def persist_device_info(self, info: dict):
         """将设备信息写入数据库（仅更新 last_seen）"""
-        success = db_manager.upsert_device_info(info)
+        success = self.db_manager.upsert_device_info(info)
         if success:
             self.logger.debug(f"设备 last_seen 已更新: {info['device_id']}")
         else:
@@ -103,7 +95,7 @@ class DeviceManager(QObject):
 
     def load_devices_from_db(self):
         """从数据库加载设备信息（仅基本信息，状态默认离线）"""
-        devices = db_manager.get_all_devices()
+        devices = self.db_manager.get_all_devices()
         for info in devices:
             device_id = info["device_id"]
             self.device_data_dict[device_id] = {
@@ -117,5 +109,20 @@ class DeviceManager(QObject):
         self.device_list_updated.emit(list(self.device_data_dict.keys()))
 
 
+_device_manager = None
+
+
+def get_device_manager() -> DeviceManager:
+    global _device_manager
+    if _device_manager is None:
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is None:
+            raise RuntimeError("QApplication not created yet!")
+        _device_manager = DeviceManager(parent=app)  # 绑定到 app
+    return _device_manager
+
+
 # 全局实例
-device_manager = DeviceManager()
+# device_manager = DeviceManager()
