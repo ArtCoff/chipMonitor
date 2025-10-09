@@ -645,6 +645,9 @@ class MqttManager(QObject):
     def _on_device_data_processed(self, task_id: str, result: Any):
         """主线程：设备数据处理完成-发布到数据总线data_bus"""
         try:
+            # 只处理 MQTT 相关的任务，忽略其他任务
+            if not task_id.startswith("mqtt_"):
+                return
             if not isinstance(result, dict):
                 logging.warning(f"任务 {task_id} 返回无效数据类型: {type(result)}")
                 return

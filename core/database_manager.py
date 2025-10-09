@@ -551,6 +551,9 @@ class DatabaseManager(QObject):
     def query_telemetry_data(
         self,
         device_id: Optional[str] = None,
+        device_type: Optional[str] = None,  # 添加缺失参数
+        recipe: Optional[str] = None,  # 添加缺失参数
+        lot_number: Optional[str] = None,  # 添加缺失参数
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
         limit: int = 1000,
@@ -569,8 +572,30 @@ class DatabaseManager(QObject):
                     params = []
 
                     if device_id:
-                        conditions.append("device_id = %s")
+                        # 支持通配符查询
+                        if "%" in device_id:
+                            conditions.append("device_id LIKE %s")
+                        else:
+                            conditions.append("device_id = %s")
                         params.append(device_id)
+
+                    if device_type:
+                        conditions.append("device_type = %s")
+                        params.append(device_type)
+
+                    if recipe:
+                        if "%" in recipe:
+                            conditions.append("recipe LIKE %s")
+                        else:
+                            conditions.append("recipe = %s")
+                        params.append(recipe)
+
+                    if lot_number:
+                        if "%" in lot_number:
+                            conditions.append("lot_number LIKE %s")
+                        else:
+                            conditions.append("lot_number = %s")
+                        params.append(lot_number)
 
                     if start_time:
                         conditions.append("data_timestamp >= %s")
@@ -597,15 +622,21 @@ class DatabaseManager(QObject):
                     """
                     params.append(limit)
 
+                    self.logger.debug(f"执行查询: {query}")
+                    self.logger.debug(f"查询参数: {params}")
+
                     cursor.execute(query, params)
-                    return [dict(row) for row in cursor.fetchall()]
+                    results = [dict(row) for row in cursor.fetchall()]
+
+                    self.logger.info(f"查询返回 {len(results)} 条记录")
+                    return results
 
             finally:
                 self._connection_pool.putconn(conn)
 
         except Exception as e:
             self.logger.error(f"查询遥测数据失败: {e}")
-            return []
+            raise  # 重新抛出异常以便上层处理
 
     def query_alerts(
         self,

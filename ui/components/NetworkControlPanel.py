@@ -22,6 +22,7 @@ from PySide6.QtGui import QFont, QIcon
 from config.mqtt_config import get_current_config, save_config, MqttConfig
 from core.mqtt_client import get_mqtt_manager
 from core.device_manager import get_device_manager
+from core.data_bus import get_data_bus, DataMessage
 from utils.path import ICON_DIR
 
 
@@ -244,7 +245,7 @@ class NetworkControlPanel(QDialog):
 
             # DataBus监听
             try:
-                from core.data_bus import data_bus, DataChannel
+                from core.data_bus import DataChannel
 
                 # 添加直接的调试监听器
                 def debug_telemetry_handler(message):
@@ -264,7 +265,7 @@ class NetworkControlPanel(QDialog):
 
                 def debug_error_handler(message):
                     try:
-                        from core.data_bus import DataMessage
+                        self.data_bus = get_data_bus()
 
                         if isinstance(message, DataMessage):
                             error_data = message.data
@@ -274,8 +275,10 @@ class NetworkControlPanel(QDialog):
                     except Exception as e:
                         self.add_log(f"处理调试错误失败: {e}")
 
-                data_bus.subscribe(DataChannel.TELEMETRY_DATA, debug_telemetry_handler)
-                data_bus.subscribe(DataChannel.ERRORS, debug_error_handler)
+                self.data_bus.subscribe(
+                    DataChannel.TELEMETRY_DATA, debug_telemetry_handler
+                )
+                self.data_bus.subscribe(DataChannel.ERRORS, debug_error_handler)
             except Exception as e:
                 self.logger.warning(f"DataBus连接失败: {e}")
 

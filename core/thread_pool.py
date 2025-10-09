@@ -10,12 +10,13 @@ from PySide6.QtCore import QObject, Signal, QTimer, Qt
 
 
 class TaskType(Enum):
-    """任务类型 —— 按资源特征划分"""
+    """任务类型"""
 
     DATA_PROCESSING = "data"
     EVENT_HANDLING = "event"
     MQTT_PROCESSING = "mqtt"
     BATCH_PROCESSING = "batch"
+    HISTORY_DATA_QUERY = "history_data"
     ANALYTICS = "analytics"
 
 
@@ -130,7 +131,7 @@ class ThreadPool(QObject):
         *args,
         task_id: Optional[str] = None,
         priority: TaskPriority = TaskPriority.NORMAL,
-        callback: Optional[Callable] = None,
+        # callback: Optional[Callable] = None,
         timeout: Optional[float] = None,
         max_retries: int = 0,
         **kwargs,
@@ -147,7 +148,7 @@ class ThreadPool(QObject):
                 func=func,
                 args=args,
                 kwargs=kwargs,
-                callback=callback,
+                # callback=callback,
                 timeout=timeout,
                 max_retries=max_retries,
             )
@@ -164,7 +165,7 @@ class ThreadPool(QObject):
             self.task_type_map[task_id] = task_type
 
             # 通知开始
-            self.task_started.emit(task_id, task_type.value)
+            # self.task_started.emit(task_id, task_type.value)
 
             logging.debug(
                 f"任务提交: {task_id} ({task_type.value}, 优先级: {priority.value})"
@@ -186,44 +187,52 @@ class ThreadPool(QObject):
             self.active_worker_count += 1
 
         try:
-            # 超时检查
-            if task.timeout and (time.time() - task.created_time) > task.timeout:
-                raise TimeoutError(f"任务超时: {task.task_id}")
-
             # 执行用户函数
             result = task.func(*task.args, **task.kwargs)
             execution_time = time.time() - start_time
 
             # 更新成功统计
             self._update_success_stats(task, execution_time)
-
+            # 不使用Qtimer执行回调，直接使用信号槽机制
             # 安全执行回调（在主线程）
-            if task.callback:
-                try:
-                    QTimer.singleShot(0, lambda: task.callback(result))
-                except Exception as e:
-                    logging.error(f"回调执行失败 {task.task_id}: {e}")
-
-            # 通知完成
-            self.task_completed.emit(task.task_id, result)
+            # if task.callback:
+            #     try:
+            #         QTimer.singleShot(0, lambda: task.callback(result))
+            #     except Exception as e:
+            #         logging.error(f"回调执行失败 {task.task_id}: {e}")
+            #
+            self.task_completed.emit(
+                task.task_id,
+                {
+                    "success": True,
+                    "data": result,
+                    "task_type": task.task_type.value,
+                    "execution_time": execution_time,
+                },
+            )
 
         except Exception as e:
             execution_time = time.time() - start_time
             error_msg = f"任务执行失败 {task.task_id}: {e}"
-
             # 重试机制
-            if task.retry_count < task.max_retries:
-                task.retry_count += 1
-                logging.warning(
-                    f"任务重试 {task.task_id} (第{task.retry_count}次): {e}"
-                )
-                self.task_retried.emit(task.task_id, task.retry_count)
-                future = self.executor.submit(self._execute_task, task)
-                self.active_tasks[task.task_id] = future
-                return
+            # if task.retry_count < task.max_retries:
+            #     task.retry_count += 1
+            #     logging.warning(
+            #         f"任务重试 {task.task_id} (第{task.retry_count}次): {e}"
+            #     )
+            #     self.task_retried.emit(task.task_id, task.retry_count)
+            #     future = self.executor.submit(self._execute_task, task)
+            #     self.active_tasks[task.task_id] = future
+            #     return
 
             # 更新失败统计
-            self._update_failure_stats(task)
+            # self._update_failure_stats(task)
+            error_msg = {
+                "success": False,
+                "error": str(e),
+                "task_type": task.task_type.value,
+                "execution_time": execution_time,
+            }
             self.task_failed.emit(task.task_id, error_msg)
 
         finally:

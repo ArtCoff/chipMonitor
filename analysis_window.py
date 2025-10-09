@@ -54,10 +54,6 @@ def setup_logging():
 def main():
     setup_logging()
     app = QApplication(sys.argv)
-    app.setStyle("Basic")
-    import os
-
-    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Basic"
     # 创建并显示主窗口
     window = HistoryDataWindow()
     window.show()

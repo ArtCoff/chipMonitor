@@ -312,14 +312,9 @@ class MainWindow(QMainWindow):
     def open_history_window(self):
         try:
             if not self.history_data_window:
-                self.history_data_window = HistoryDataWindow(self)
-
-                # 连接信号
-                self.history_data_window.data_selected.connect(
-                    self.on_history_data_selected
-                )
-
-            self.history_data_window.show_window()
+                # 不传递parent
+                self.history_data_window = HistoryDataWindow()
+            self.history_data_window.show()
             self.logger.info("历史数据查询窗口已打开")
 
         except Exception as e:
