@@ -68,6 +68,7 @@ class DatabasePersistenceService(QObject):
             "batch_flushes": 0,
             "batch_errors": 0,
             "channels_active": 0,
+            "running": self._running,
         }
         self._start_time = 0
 

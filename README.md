@@ -41,3 +41,29 @@
 - 生产数据可视化分析与报表
 
 ### 界面展示
+
+<figure>
+  <img src="./ui_example/image.png" alt="图片描述" />
+  <figcaption>主界面
+  顶部自定义MenuBar;左侧可视化状态控制；
+  中间实时设备状态与数据可视化；
+  右侧设备选择与实时数据显示；
+  底部状态显示。
+ </figcaption>
+</figure>
+<figure>
+  <img src="./ui_example/image-4.png" alt="图片描述" />
+  <figcaption>基于QMdiArea和PyQtGraph的实时数据绘制；支持数据窗口以及交互式浏览</figcaption>
+</figure>
+<figure>
+  <img src="./ui_example/image-1.png" alt="图片描述" />
+  <figcaption>网络调试窗口；支持调试连接的数据服务；可进一步拓展到Modbus，Http数据服务</figcaption>
+</figure>
+<figure>
+  <img src="./ui_example/image-2.png" alt="图片描述" />
+  <figcaption>数据库管理窗口；通过图形化操作连接PostgreSQL数据库，支持进一步拓展到MySQL，SQLite等数据库</figcaption>
+</figure>
+<figure>
+  <img src="./ui_example/image-3.png" alt="图片描述" />
+  <figcaption>数据库数据统计</figcaption>
+</figure>

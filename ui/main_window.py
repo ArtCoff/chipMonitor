@@ -45,11 +45,10 @@ class MainWindow(QMainWindow):
         self.visualization_widget = None
         self.stack_control_widget = None
 
-        self.persistence_status_timer = QTimer()
-        self.persistence_status_timer.timeout.connect(self.update_persistence_status)
-        self.persistence_status_timer.start(10000)  # 10秒检查一次持久化服务状态
+        self.status_refresh_timer = QTimer()
+        self.status_refresh_timer.timeout.connect(self.refresh_sys_status)
+        self.status_refresh_timer.start(3000)  # 10秒检查一次持久化服务状态
 
-        # device_manager.load_devices_from_db()
         # 当前可视化模式
         self.current_mode = "table"
         # 添加启动服务定时器
@@ -63,6 +62,15 @@ class MainWindow(QMainWindow):
         self.setup_ui()
         self.load_qss_style()
         self.setup_signal_connections()
+
+    def refresh_sys_status(self):
+        """刷新MenuBar上的服务状态指示灯"""
+        mqtt_connected = self.mqtt_manager.is_connected()
+        persistence_running = self.database_persistence_service._running
+        db_connected = self.db_manager.is_connected()
+        self.menu_bar.update_all_status(
+            mqtt_connected, persistence_running, db_connected
+        )
 
     def setup_ui(self):
         """设置主界面布局"""
@@ -134,8 +142,8 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("系统就绪")
 
         # 连接指示器
-        self.connection_indicator = QLabel("● 未连接")
-        self.connection_indicator.setStyleSheet("color: red; font-weight: bold;")
+        self.connection_indicator = QLabel("● 系统就绪")
+        self.connection_indicator.setStyleSheet("color: green; font-weight: bold;")
 
         # 可视化模式指示器
         self.visualization_mode_label = QLabel("模式: 表格")

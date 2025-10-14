@@ -108,7 +108,7 @@ class MenuBar(QWidget):
         return button
 
     def create_status_widget(self):
-        """创建状态指示和控制组件"""
+        """创建状态指示"""
         widget = QFrame()
         widget.setObjectName("statusControlWidget")
         widget.setFrameStyle(QFrame.NoFrame)
@@ -169,7 +169,7 @@ class MenuBar(QWidget):
         return widget
 
     def create_system_status(self):
-        """创建系统状态指示"""
+        """创建数据库状态指示"""
         widget = QWidget()
         layout = QHBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
