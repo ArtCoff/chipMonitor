@@ -4,11 +4,11 @@
 
 ### 技术栈
 
-**前端框架**: PySide6 (Qt6) - 跨平台桌面应用开发
-**数据可视化**: PyQtGraph - 高性能实时图表绘制
-**通信协议**: MQTT - 设备数据采集与实时通信
-**数据库**: PostgreSQL + psycopg2 - 海量时序数据存储
-**并发处理**: ThreadPoolExecutor - 多线程数据处理
+- **前端框架**: PySide6 (Qt6) - 跨平台桌面应用开发
+- **数据可视化**: PyQtGraph - 高性能实时图表绘制
+- **通信协议**: MQTT - 设备数据采集与实时通信
+- **数据库**: PostgreSQL + psycopg2 - 海量时序数据存储
+- **并发处理**: ThreadPoolExecutor - 多线程数据处理
 
 ### 系统架构
 
