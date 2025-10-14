@@ -600,7 +600,21 @@ class MainWindow(QMainWindow):
         """关闭事件处理"""
         try:
             self.logger.info("关闭主窗口...")
+            mqtt_manager = get_mqtt_manager()
+            if mqtt_manager:
+                mqtt_manager.disconnect()
+                self.logger.info("✅ MQTT 客户端已断开")
 
+            # 🔥 2. 等待线程池完成当前任务
+            # thread_pool = get_thread_pool()
+            # if thread_pool:
+            #     QTimer.singleShot(500, lambda: thread_pool.shutdown(wait=True))
+            #     self.logger.info("✅ 线程池已关闭")
+
+            # 🔥 3. 断开数据库
+            if hasattr(self, "db_manager"):
+                self.db_manager.disconnect()
+                self.logger.info("✅ 数据库已断开")
             # 关闭子窗口
             if hasattr(self, "history_data_window") and self.history_data_window:
                 self.history_data_window.close()
